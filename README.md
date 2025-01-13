@@ -63,46 +63,47 @@ The released software is an initial development release version:
 
 ```mermaid
 sequenceDiagram
-    title Document Signing
+title Document Signing
 
     actor U as UserAgent
-    participant EW as EUDI Wallet
-    participant SCA as Signature Creation Application
+    participant EW as EUDI Wallet    
+    participant BR as Browser
+    participant RP as Web Page (RP)
+    participant SCA as Signature Creation Application (RP)
     participant AS as Authorization Server (QTSP)
     participant RS as Resource Server (QTSP)
     participant OIDV as OID4VP Verifier
 
-    U->>+EW: Chooses credential to use
-    U->>+EW: Request document signing
-    EW->>+RS: /csc/v2/credentials/info
-    RS->>-EW: credentials info
+    U->>+RP: Choose credential to use
+    RP->>+SCA: Request document signing
+    SCA->>+RS: Get certificate of the chosen credential (credentials/info)
+    SCA->>+SCA: Get document's hash
 
-    EW->>+SCA: "calculate hash" (certificates, document to sign)
-    SCA->>-EW: hash value
-
-    EW->>+AS: /oauth2/authorize?...&redirect_uri=wallet://login/oauth2/code&...
-    AS->>+OIDV: Authorization Request (Post dev.verifier-backend.eudiw.dev/ui/presentations?redirect_uri={oid4vp_redirect_uri})
-    OIDV->>-AS: Authorization Request returns
+    SCA->>+AS: /oauth2/authorize
+    AS->>+OIDV: Authorization Request (POST {verifier}/ui/presentations)
+    OIDV-->>-AS: Authorization Request returns
     AS->>+AS: Generate link to Wallet
-    AS->>-EW: Redirect to link in the Wallet
-    EW->>-U: Request Authorization
+    AS-->>-BR: Render link as QrCode
 
-    U->>+EW: Authorize (Shares PID)
-    EW->>+AS: Redirect to oid4vp_redirect_uri
+    EW->>+BR: Scan QrCode 
+    EW->>+OIDV: Share requested information
+
     AS->>+OIDV: Request VP Token
-    OIDV->>-AS: Get and validate VP Token
-    AS->>-EW: Returns session token (successful authentication) & Redirects to /oauth2/authorize
-    EW->>+AS: GET /oauth2/authorize?...&redirect_uri=wallet://oauth2/callback&... [Cookie JSession]
-    AS->>-EW: Redirect to wallet://login/oauth2/code?code={code}
-    EW->>+EW: Get wallet://login/oauth2/code....
-    EW->>+AS: /oauth2/token?code={code}
-    AS->>-EW: access token authorizing credentials use (SAD/R)
+    OIDV-->>-AS: Get and validate VP Token
 
-    EW->>+RS: /signatures/signHash
-    RS->>-EW: signature
+    AS-->>-BR: Redirects to /oauth2/authorize (with session token)
+    BR->>+AS: /oauth2/authorize [Cookie JSession]
+    AS-->>-BR: Redirect to {sca_redirect_uri}?code={code}
 
-    EW->>+SCA: "obtain signed document" (certificates & document & signature value)
-    SCA->>-EW: signed document
+    BR->>+SCA: {sca_redirect_uri}?code={code}
+    SCA->>+AS: /oauth2/token?code={code}
+    AS-->>-SCA: access token authorizing credentials use (SAD/R)
+
+    SCA->>+RS: Sign hash request (/signatures/signHash)
+    RS-->>-SCA: signature
+
+    SCA->>+SCA: generate signed document 
+    SCA-->>-RP: returns signed document
 ```
 
 
