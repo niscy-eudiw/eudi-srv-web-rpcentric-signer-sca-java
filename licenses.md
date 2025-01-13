@@ -1,4 +1,4 @@
-# TrustProvider Signer
+# EUDI RP-Centric SCA
 
 ## Dependency License Report
 
