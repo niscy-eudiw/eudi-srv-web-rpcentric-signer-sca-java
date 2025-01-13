@@ -69,7 +69,7 @@ public class OAuth2Service {
 
 		String asUrl;
 		if(authorizationServerUrl == null)
-			asUrl = this.oAuthClientConfig.getDefaultAuthorizationServerUrl();
+			asUrl = this.oAuthClientConfig.getAuthorizationServerUrl();
 		else asUrl = authorizationServerUrl;
 
 		return this.qtspClient.requestOAuth2Authorize(asUrl, authorizeRequest);
@@ -99,7 +99,7 @@ public class OAuth2Service {
 
 		String asUrl;
 		if(authorizationServerUrl == null)
-			asUrl = this.oAuthClientConfig.getDefaultAuthorizationServerUrl();
+			asUrl = this.oAuthClientConfig.getAuthorizationServerUrl();
 		else asUrl = authorizationServerUrl;
 
 		JSONObject oauth2TokenResponse = getOAuth2Token(asUrl, code, codeVerifier);
