@@ -1,6 +1,13 @@
 # Changelog
 
-## [0.2.0]
+## [v0.2.1]
+
+_x Jan 2025_
+
+### Added:
+- Fix bugs found during Signature Parameter combinations testing
+
+## [v0.2.0]
 
 _13 Jan 2025_
 
