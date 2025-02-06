@@ -173,9 +173,12 @@ public class DSSService {
 		};
     }
 
-    public DSSDocument loadDssDocument(String document) {
+    public DSSDocument loadDssDocument(String document, String filename) {
         byte[] dataDocument = Base64.getDecoder().decode(document);
-        return new InMemoryDocument(dataDocument);
+		if(filename == null)
+        	return new InMemoryDocument(dataDocument);
+		else
+			return new InMemoryDocument(dataDocument, filename);
     }
 
     /*
@@ -343,31 +346,12 @@ public class DSSService {
 					parameters = padesParams;
 					break;
 				case XAdES:
-					XAdESSignatureParameters xadesParameters = new XAdESSignatureParameters();
-
-					/*if(packaging.equals(SignaturePackaging.INTERNALLY_DETACHED)){
-						List<DSSReference> references = new ArrayList<>();
-
-						DSSReference dssReference = new DSSReference();
-						dssReference.setContents(toSignDocument);
-						dssReference.setId("r-" + toSignDocument.getName());
-
-						dssReference.setDigestMethodAlgorithm(digestAlgorithm);
-						references.add(dssReference);
-
-						xadesParameters.setReferences(references);
-					}*/
-					parameters = xadesParameters;
+					parameters = new XAdESSignatureParameters();
 					break;
 				case JAdES:
 					JAdESSignatureParameters jadesParameters = new JAdESSignatureParameters();
 					jadesParameters.setJwsSerializationType(JWSSerializationType.JSON_SERIALIZATION);
-					if(packaging.equals(SignaturePackaging.DETACHED)){
-						jadesParameters.setSigDMechanism(SigDMechanism.NO_SIG_D);
-					}
-					else{
-						jadesParameters.setSigDMechanism(SigDMechanism.OBJECT_ID_BY_URI_HASH); // to use by default
-					}
+					jadesParameters.setSigDMechanism(SigDMechanism.OBJECT_ID_BY_URI_HASH); // to use by default
 					parameters = jadesParameters;
 					break;
 				default:

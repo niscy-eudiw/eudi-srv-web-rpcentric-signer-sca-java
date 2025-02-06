@@ -121,7 +121,7 @@ public class SignatureService {
             signatureDocumentForm.setSignatureValue(Base64.getDecoder().decode(signatureValue));
 
             DSSDocument docSigned = dssClient.signDocument(signatureDocumentForm);
-            fileLogger.info("Document successfully signed.");
+			fileLogger.info("Document successfully signed. Filename: {}. File MimeType: {}", docSigned.getName(), docSigned.getMimeType().getMimeTypeString());
             String signedDocumentString = getSignedDocumentString(document, docSigned);
             signedDocuments.add(signedDocumentString);
         }
@@ -166,7 +166,7 @@ public class SignatureService {
     private SignatureDocumentForm getSignatureForm(DocumentsSignDocRequest document, String hashAlgorithmOID,
           X509Certificate certificate, Date date, CommonTrustedCertificateSource certificateSource, List<X509Certificate> certificateChain) throws Exception{
 
-        DSSDocument dssDocument = dssClient.loadDssDocument(document.getDocument());
+        DSSDocument dssDocument = dssClient.loadDssDocument(document.getDocument(), document.getDocument_name());
 
         SignaturePackaging signaturePackaging;
         ASiCContainerType asicContainerType;

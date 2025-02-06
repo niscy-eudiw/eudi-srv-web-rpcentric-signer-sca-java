@@ -20,7 +20,7 @@ spring:
       - "oauth2"
 
 server:
-  port: 8088
+  port: 8086
   error:
     include-message: always
 
