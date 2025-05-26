@@ -25,6 +25,7 @@ import eu.europa.ec.eudi.signer.r4.sca.web.dto.SignatureDocumentRequest;
 import eu.europa.esig.dss.spi.x509.CommonTrustedCertificateSource;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
+import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -62,7 +63,7 @@ public class SignaturesController {
 
     @PostMapping(value="/doc")
     public void signatureDoc(@RequestHeader(name="Authorization") String authorizationBearerHeader,
-                             @RequestBody SignatureDocumentRequest signatureRequest, HttpSession session,
+                             @Valid @RequestBody SignatureDocumentRequest signatureRequest, HttpSession session,
                              HttpServletResponse response) throws IOException {
         logger.info("Request received for signature of a document.");
 
@@ -152,6 +153,8 @@ public class SignaturesController {
         HttpSession session = (HttpSession) sessionInformation.getPrincipal();
         SessionState sessionState = (SessionState) session.getAttribute("signatureState");
 
+        logger.info("Received request with code {}", code);
+
         String access_token;
         try {
             access_token = this.oAuth2Service.getOAuth2AccessToken(sessionState.getAuthorizationServerUrl(), code, sessionState.getCodeVerifier());
@@ -178,7 +181,6 @@ public class SignaturesController {
         }
         catch (Exception e){
             logger.error(e.getMessage());
-            e.printStackTrace();
             response.sendError(HttpServletResponse.SC_BAD_REQUEST, "There was an error trying to obtain the signed document. Please try again.");
             return null;
         }

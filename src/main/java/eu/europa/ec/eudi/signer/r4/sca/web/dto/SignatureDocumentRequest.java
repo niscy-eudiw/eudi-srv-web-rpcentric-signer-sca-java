@@ -17,7 +17,9 @@
 package eu.europa.ec.eudi.signer.r4.sca.web.dto;
 
 import eu.europa.ec.eudi.signer.r4.sca.web.dto.qtsp.signatures.signDoc.DocumentsSignDocRequest;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Pattern;
 import java.util.List;
 
@@ -25,7 +27,8 @@ public class SignatureDocumentRequest {
     @NotBlank(message = "The credentialID must be present.")
     private String credentialID;
 
-    @NotBlank(message = "The list of documents and configuration must be present.")
+    @NotEmpty(message = "The list of documents and configuration must be present.")
+    @Valid
     private List<DocumentsSignDocRequest> documents;
 
     @NotBlank(message = "The hashAlgorithmOID must be defined.")
@@ -106,7 +109,7 @@ public class SignatureDocumentRequest {
 
     @Override
     public String toString() {
-        return "CredentialAuthorizationRequest{" +
+        return "SignatureDocumentRequest{" +
               "credentialID='" + credentialID + '\'' +
               ", documents=" + documents +
               ", hashAlgorithmOID='" + hashAlgorithmOID + '\'' +

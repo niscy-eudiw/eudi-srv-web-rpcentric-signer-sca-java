@@ -108,4 +108,20 @@ public class TokenRequest {
 	public void setCode_verifier(String code_verifier) {
 		this.code_verifier = code_verifier;
 	}
+
+	@Override
+	public String toString() {
+		return "TokenRequest{" +
+			  "grant_type='" + grant_type + '\'' +
+			  ", code='" + code + '\'' +
+			  ", refresh_token='" + refresh_token + '\'' +
+			  ", client_id='" + client_id + '\'' +
+			  ", client_secret='" + client_secret + '\'' +
+			  ", client_assertion='" + client_assertion + '\'' +
+			  ", client_assertion_type='" + client_assertion_type + '\'' +
+			  ", redirect_uri='" + redirect_uri + '\'' +
+			  ", authorization_details='" + authorization_details + '\'' +
+			  ", code_verifier='" + code_verifier + '\'' +
+			  '}';
+	}
 }

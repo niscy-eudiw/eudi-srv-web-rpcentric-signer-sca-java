@@ -29,7 +29,7 @@ the [EUDI Wallet Reference Implementation project description](https://github.co
 
 This is a REST API server implementing the RP-centric SCA for the remote Qualified Electronic Signature (rQES) component of the EUDI Wallet.
 
-This implementation of the SCA serves as a component of a Relying Party (RP) web page. It runs on the port 8088 and can be used to sign documents.
+This implementation of the SCA serves as a component of a Relying Party (RP) web page. It runs on the port 8087 and can be used to sign documents.
 Currently, the server is running and being used by the RP web page at the url https://rpcentric.signer.eudiw.dev/tester/. However, you can also [deploy](#deployment) it in your environment.
 
 The RP web page utilizing this SCA, which is defined in the repository [eudi-srv-web-rpcentric-signer-relyingparty-py](https://github.com/eu-digital-identity-wallet/eudi-srv-web-rpcentric-signer-relyingparty-py).
@@ -106,13 +106,12 @@ title Document Signing
     SCA-->>-RP: returns signed document
 ```
 
-
 ## Endpoints
 
 ### Sign Document Endpoint
 
 * Method: POST
-* URL: http://localhost:8086/signatures/doc
+* URL: http://localhost:8087/signatures/doc
 
 This endpoint initiates the process to obtain a signed document. 
 
@@ -132,7 +131,7 @@ If the request is successful, the browser will be redirected to the OAuth 2.0 Au
 ### Signature Callback Endpoint
 
 * Method: GET
-* URL: http://localhost:8086/signatures/callback
+* URL: http://localhost:8087/signatures/callback
 
 This endpoint serves as the redirect endpoint, where the browser is redirected after the OAuth 2.0 Authorization process.
 
@@ -150,28 +149,35 @@ This endpoint displays an HTML page that allows the user to return to the RP pag
 
 ### Signature Creation Application
 
-1. **Create the application-oauth2.yml file**
-
-    After creating the file **application-oauth2.yml** in the **src/main/resources** folder, add and complete the following data:
+1. **Configure the OAuth2 Parameters**
+    In the file **aplication.yml** in the **src/main/resources** folder, you can see the structure with the following data:
 
     ```
-    oauth-client:
-        client-id: "{client id}"
-        client-secret: "{client secret}"
-        redirect-uri: "http://localhost:8086/signatures/callback" # the endpoint of the SCA where to redirect after /oauth2/authorize
-        scope: "credential" 
-        client-authentication-methods: "client_secret_basic"
-        authorization-grant-types: "authorization_code"
-        authorization-server-url: "{authorization server}"
-        resource-server-url: "{resource server}"
+   oauth-client:
+      client-id: ${OAUTH2_CLIENT_ID}
+      client-secret: ${OAUTH2_CLIENT_SECRET}
+      redirect-uri: "http://localhost:8087/signatures/callback"
+      scope: "credential"
+      authorization-grant-types: ${OAUTH2_AUTHORIZATION_GRANT_TYPE}
+      authorization-server-url: "http://localhost:8084"
+      resource-server-url: "http://localhost:8085"
     ```
 
+   From the previous parameters, you should define the environment variables "OAUTH2_CLIENT_ID", "OAUTH2_CLIENT_SECRET" and "OAUTH2_AUTHORIZATION_GRANT_TYPE".
     The data added to the previous parameter should be retrieved from one QTSP with support for OAuth2, and that makes available the endpoints:
     * credentials/info
     * signatures/signHash
     * oauth2/authorize
     * oauth2/token
     As defined in the CSC API Specification v2.0.2.
+
+    The environment variables can also be set up in the docker-compose.yml file to start the "EUDI RP-centric SCA application" as a dockerize application:
+    ```
+    environment:
+       OAUTH2_CLIENT_ID: ...
+       OAUTH2_CLIENT_SECRET: ...
+       OAUTH2_AUTHORIZATION_GRANT_TYPE: ...
+    ```
 
 2. **Add the Timestamp Authority Information**
 
@@ -189,9 +195,15 @@ This endpoint displays an HTML page that allows the user to return to the RP pag
 3. **Run the Resource Server**
    
     After configuring the previously mentioned settings, navigate to the **tools** directory and run the script:
-   ```
+   ```shell
    ./deploy_sca.sh
    ```
+
+    Optionally, to start the "EUDI RP-centric SCA" application as a Docker Container, run the command:
+    ```shell
+    docker compose up --build
+    ```
+
 
 ## How to contribute
 
