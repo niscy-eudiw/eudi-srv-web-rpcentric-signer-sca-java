@@ -2,10 +2,14 @@
 
 ## [v0.3.0]
 
-_x Jan 2025_
+_28 May 2025_
 
 ### Fixed:
 - Bugs found during Signature Parameter combinations testing.
+- Docker support for the application:
+  - Added Dockerfile to build the application image.
+  - Added docker-compose.yml.
+  - Instructions for building and running the container added to README.md.
 
 ## [v0.2.0]
 

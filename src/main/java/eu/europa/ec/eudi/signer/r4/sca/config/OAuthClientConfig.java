@@ -24,9 +24,7 @@ public class OAuthClientConfig {
     private String clientSecret;
     private String redirectUri;
     private String scope;
-    private String clientAuthenticationMethods;
     private String authorizationGrantTypes;
-
     private String authorizationServerUrl;
     private String resourceServerUrl;
 
@@ -76,14 +74,6 @@ public class OAuthClientConfig {
 
     public void setResourceServerUrl(String resourceServerUrl) {
         this.resourceServerUrl = resourceServerUrl;
-    }
-
-    public String getClientAuthenticationMethods() {
-        return clientAuthenticationMethods;
-    }
-
-    public void setClientAuthenticationMethods(String clientAuthenticationMethods) {
-        this.clientAuthenticationMethods = clientAuthenticationMethods;
     }
 
     public String getAuthorizationGrantTypes() {

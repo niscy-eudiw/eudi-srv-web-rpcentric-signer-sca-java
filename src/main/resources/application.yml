@@ -20,12 +20,11 @@ spring:
       - "oauth2"
 
 server:
-  port: 8086
+  port: 8087
   error:
     include-message: always
 
 logging:
-  config: logback.xml
   level:
     org.hibernate: ERROR
     org.springframework.web: INFO
@@ -35,3 +34,12 @@ timestamp-authority:
   server-url: "http://ts.cartaodecidadao.pt/tsa/server"
   supported-digest-algorithm:
     - "2.16.840.1.101.3.4.2.1"
+
+oauth-client:
+  client-id: ${OAUTH2_CLIENT_ID}
+  client-secret: ${OAUTH2_CLIENT_SECRET}
+  redirect-uri: "http://localhost:8087/signatures/callback"
+  scope: "credential"
+  authorization-grant-types: ${OAUTH2_AUTHORIZATION_GRANT_TYPE}
+  authorization-server-url: "http://localhost:8084"
+  resource-server-url: "http://localhost:8085"

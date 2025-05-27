@@ -26,6 +26,8 @@ import java.util.Base64;
 
 import eu.europa.ec.eudi.signer.r4.sca.web.dto.qtsp.oauth2.TokenRequest;
 import org.json.JSONObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -33,6 +35,7 @@ import org.springframework.stereotype.Service;
 public class OAuth2Service {
 	private final QTSPClient qtspClient;
 	private final OAuthClientConfig oAuthClientConfig;
+	private static final Logger logger = LoggerFactory.getLogger(OAuth2Service.class);
 
 	public OAuth2Service(@Autowired QTSPClient qtspClient,
 						 @Autowired OAuthClientConfig oAuthClientConfig) {
@@ -81,8 +84,7 @@ public class OAuth2Service {
 	}
 
 	private JSONObject getOAuth2Token(String authorizationServerUrl, String code, String codeVerifier) throws Exception {
-
-
+		logger.info("Making request to QTSP as client_id: {}", this.oAuthClientConfig.getClientId());
 		String authorizationHeader = getBasicAuthenticationHeader(this.oAuthClientConfig.getClientId(), this.oAuthClientConfig.getClientSecret());
 
 		TokenRequest tokenRequest = new TokenRequest();
@@ -92,17 +94,22 @@ public class OAuth2Service {
 		tokenRequest.setRedirect_uri(this.oAuthClientConfig.getRedirectUri());
 		tokenRequest.setCode_verifier(codeVerifier);
 
+		logger.info("Making the following request to QTSP: {}", tokenRequest);
 		return this.qtspClient.requestOAuth2Token(authorizationServerUrl, authorizationHeader, tokenRequest);
 	}
 
 	public String getOAuth2AccessToken(String authorizationServerUrl, String code, String codeVerifier) throws Exception{
-
 		String asUrl;
 		if(authorizationServerUrl == null)
 			asUrl = this.oAuthClientConfig.getAuthorizationServerUrl();
 		else asUrl = authorizationServerUrl;
 
+		logger.info("Retrieving access token from Authorization Server {}, with code {}", asUrl, code);
 		JSONObject oauth2TokenResponse = getOAuth2Token(asUrl, code, codeVerifier);
+		if(!oauth2TokenResponse.has("access_token")){
+			logger.error("Access token missing from OAuth2 Token Response.");
+			throw new Exception("Access token missing from OAuth2 Token Response.");
+		}
 		return "Bearer "+oauth2TokenResponse.getString("access_token");
 	}
 }
