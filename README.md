@@ -14,8 +14,8 @@ the [EUDI Wallet Reference Implementation project description](https://github.co
   - [Sequence Diagrams](#sequence-diagrams)
     - [Credential Authorization](#credential-authorization)
   - [Endpoints](#endpoints)
-    - [Calculate Hash Endpoint](#calculate-hash-endpoint)
-    - [Obtain Signed Document Endpoint](#obtain-signed-document-endpoint)
+    - [Calculate Hash Endpoint](#sign-document-endpoint)
+    - [Obtain Signed Document Endpoint](#signature-callback-endpoint)
   - [Deployment](#deployment)
     - [Requirements](#requirements)
     - [Signature Creation Application](#signature-creation-application)
@@ -164,14 +164,14 @@ This endpoint displays an HTML page that allows the user to return to the RP pag
     ```
 
    From the previous parameters, you should define the environment variables "OAUTH2_CLIENT_ID", "OAUTH2_CLIENT_SECRET" and "OAUTH2_AUTHORIZATION_GRANT_TYPE".
-    The data added to the previous parameter should be retrieved from one QTSP with support for OAuth2, and that makes available the endpoints:
+   The data added to the previous parameter should be retrieved from one QTSP with support for OAuth2, and that makes available the endpoints:
     * credentials/info
     * signatures/signHash
     * oauth2/authorize
     * oauth2/token
     As defined in the CSC API Specification v2.0.2.
 
-    The environment variables can also be set up in the docker-compose.yml file to start the "EUDI RP-centric SCA application" as a dockerize application:
+    The environment variables can also be set up in the docker-compose.yml file to start the "EUDI RP-centric SCA application" as a dockerized application:
     ```
     environment:
        OAUTH2_CLIENT_ID: ...
@@ -194,12 +194,12 @@ This endpoint displays an HTML page that allows the user to return to the RP pag
 
 3. **Run the Resource Server**
    
-    After configuring the previously mentioned settings, navigate to the **tools** directory and run the script:
+   After configuring the previously mentioned settings, navigate to the **tools** directory and run the script:
    ```shell
    ./deploy_sca.sh
    ```
 
-    Optionally, to start the "EUDI RP-centric SCA" application as a Docker Container, run the command:
+   Optionally, to start the "EUDI RP-centric SCA" application as a Docker Container, run the command:
     ```shell
     docker compose up --build
     ```

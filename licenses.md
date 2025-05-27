@@ -135,16 +135,9 @@ _2025-01-13 12:11:20 CET_
 > -   **POM Project URL**: [https://github.com/douglascrockford/JSON-java](https://github.com/douglascrockford/JSON-java)
 > -   **POM License**: Public Domain - [https://github.com/stleary/JSON-java/blob/master/LICENSE](https://github.com/stleary/JSON-java/blob/master/LICENSE)
 
-## Base Project
-
-**26** **Group:** `com.eidtrust` **Name:** `signer` **Version:** `0.1.0`
-
-> -   **POM Project URL**: [https://github.com/devisefutures/com.eidtrust.signer](https://github.com/devisefutures/com.eidtrust.signer)
-> -   **POM License**: Unlicense License - [https://github.com/devisefutures/com.eidtrust.signer/blob/main/LICENSE](https://github.com/devisefutures/com.eidtrust.signer/blob/main/LICENSE)
-
 ## EUDIW rQES R3 - Wallet-Driven
 
-**27** **Group:** `eu.europa.ec.eudi.signer.r3` **Name:** `sca` **Version:** `0.2.0`
+**26** **Group:** `eu.europa.ec.eudi.signer.r3` **Name:** `sca` **Version:** `0.2.0`
 
 > -   **POM Project URL**: [https://github.com/eu-digital-identity-wallet/eudi-srv-web-walletdriven-signer-external-sca-java](https://github.com/eu-digital-identity-wallet/eudi-srv-web-walletdriven-signer-external-sca-java)
 > -   **POM License**: Apache License, Version 2.0 - [https://github.com/eu-digital-identity-wallet/eudi-srv-web-walletdriven-signer-external-sca-java/blob/main/LICENSE](https://github.com/eu-digital-identity-wallet/eudi-srv-web-walletdriven-signer-external-sca-java/blob/main/LICENSE)
