@@ -42,13 +42,13 @@
         <appender-ref ref="FILE" />
     </root>-->
 
-    <springProfile name="prod">
+    <springProfile name="dev">
         <logger name="com.example" level="INFO"/>
         <root level="INFO">
             <appender-ref ref="FILE"/>
         </root>
     </springProfile>
-    <springProfile name="!prod">
+    <springProfile name="!dev">
         <logger name="com.example" level="DEBUG"/>
         <root level="DEBUG">
             <appender-ref ref="CONSOLE"/>
