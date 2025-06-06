@@ -4,7 +4,7 @@
 
 _28 May 2025_
 
-### Fixed:
+### Added:
 - Bugs found during Signature Parameter combinations testing.
 - Docker support for the application:
   - Added Dockerfile to build the application image.

@@ -2,6 +2,7 @@ tests/*
 src/main/resources/application-oauth2.yml
 src/main/resources/application-dev.yml
 src/main/resources/TSA_CC.pem
+.env
 
 # Compiled class file
 *.class
