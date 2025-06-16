@@ -15,6 +15,6 @@ WORKDIR /opt/app
 
 # Start authorization_server
 COPY --from=builder /opt/app/target/*.jar sca.jar
-COPY src/main/resources/TSA_CC.pem src/main/resources/TSA_CC.pem
-EXPOSE 8087
+
+EXPOSE 8088
 ENTRYPOINT ["java", "-jar", "sca.jar"]

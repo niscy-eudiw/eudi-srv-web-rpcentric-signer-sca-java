@@ -5,8 +5,8 @@ services:
       dockerfile: Dockerfile
     container_name: rp_centric_sca
     ports:
-      - "8087:8087"
-    environment:
-      OAUTH2_CLIENT_ID:
-      OAUTH2_CLIENT_SECRET:
-      OAUTH2_AUTHORIZATION_GRANT_TYPE:
+      - "8088:8088"
+    env_file:
+      - .env
+    volumes:
+      - {host_path_to_certificate}:{container_path_to_certificate}
