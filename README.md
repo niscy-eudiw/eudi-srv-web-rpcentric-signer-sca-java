@@ -30,7 +30,7 @@ the [EUDI Wallet Reference Implementation project description](https://github.co
 This is a REST API server implementing the RP-centric SCA for the remote Qualified Electronic Signature (rQES) component of the EUDI Wallet.
 
 This implementation of the SCA serves as a component of a Relying Party (RP) web page. It runs on the port 8088 and can be used to sign documents.
-Currently, the server is running and being used by the RP web page at the url https://rpcentric.signer.eudiw.dev/tester/. However, you can also [deploy](#deployment) it in your environment.
+Currently, the server is running and being used by the RP web page at the url https://rpcentric.signer.eudiw.dev/tester. However, you can also [deploy](#deployment) it in your environment.
 
 The RP web page utilizing this SCA, which is defined in the repository [eudi-srv-web-rpcentric-signer-relyingparty-py](https://github.com/eu-digital-identity-wallet/eudi-srv-web-rpcentric-signer-relyingparty-py).
 It communicates with a QTSP server, which is defined in the repository [eudi-srv-web-walletdriven-rpcentric-signer-qtsp-java](https://github.com/eu-digital-identity-wallet/eudi-srv-web-walletdriven-rpcentric-signer-qtsp-java), to achieve the remote Qualified Electronic Signature (rQES) functionality, as described in the relevant specifications
