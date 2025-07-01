@@ -1,0 +1,12 @@
+services:
+  rp_centric_sca:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rp_centric_sca
+    ports:
+      - "8088:8088"
+    env_file:
+      - .env
+    volumes:
+      - {host_path_to_certificate}:{container_path_to_certificate}

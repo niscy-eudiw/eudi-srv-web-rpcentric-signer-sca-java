@@ -46,7 +46,7 @@ public class CredentialsService {
         this.qtspClient = qtspClient;
 
         CertificateFactory certFactory = CertificateFactory.getInstance("X.509");
-        String certificateStringPath = trustedCertificateConfig.getFilename();
+        String certificateStringPath = trustedCertificateConfig.getCertificatePath();
         if (certificateStringPath == null || certificateStringPath.isEmpty()) {
             throw new Exception("Trusted Certificate Path not found in configuration file.");
         }

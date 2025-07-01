@@ -34,6 +34,7 @@ public class DocumentsSignDocRequest {
     @Pattern(regexp = "Ades-B-B|Ades-B-T|Ades-B-LT|Ades-B-LTA|Ades-B|Ades-T|Ades-LT|Ades-LTA",
           message = "Invalid conformance level")
     private String conformance_level = "AdES-B-B";
+
     private List<AttributeSignDocRequest> signed_props;
 
     @Pattern(regexp = "ENVELOPED|ENVELOPING|DETACHED|INTERNALLY_DETACHED",

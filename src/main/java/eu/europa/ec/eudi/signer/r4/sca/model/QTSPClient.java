@@ -129,27 +129,29 @@ public class QTSPClient {
             HttpGet request = new HttpGet(uri);
             HttpResponse response = httpClient.execute(request);
 
+			log.info("OAuth2 Authorize Endpoint Status Code: {}", response.getStatusLine().getStatusCode());
+
             if(response.getStatusLine().getStatusCode() == 302) {
                 String location = response.getLastHeader("Location").getValue();
                 log.info("Retrieved the authentication url: {}", location);
                 return location;
             }
-
-            return null;
+			else{
+				log.error("It wasn't impossible to retrieve QTSP Web Page where to authorize signature.");
+				throw new Exception("It wasn't impossible to retrieve QTSP Web Page where to authorize signature.");
+			}
         }
     }
 
     public JSONObject requestOAuth2Token(String authorizeServerUrl, String authorizationHeader, TokenRequest tokenRequest) throws Exception{
         try(CloseableHttpClient httpClient2 = HttpClientBuilder.create().build()) {
-
-            // {as_url}/oauth2/authorize
             UriComponentsBuilder uriBuilder = UriComponentsBuilder
                   .fromUriString(authorizeServerUrl)
                   .pathSegment("oauth2")
                   .pathSegment("token");
 
             uriBuilder
-                  .queryParam("grant_type", "authorization_code")
+                  .queryParam("grant_type", tokenRequest.getGrant_type())
                   .queryParam("code", tokenRequest.getCode())
                   .queryParamIfPresent("refresh_token", Optional.ofNullable(tokenRequest.getRefresh_token()))
                   .queryParam("client_id", tokenRequest.getClient_id())
@@ -165,18 +167,38 @@ public class QTSPClient {
             followRequest.setHeader(org.apache.http.HttpHeaders.AUTHORIZATION, authorizationHeader);
 
             HttpResponse followResponse = httpClient2.execute(followRequest);
+			log.info("OAuth2 Token Endpoint Status Code: {}", followResponse.getStatusLine().getStatusCode());
 
-            InputStream is = followResponse.getEntity().getContent();
-            BufferedReader reader = new BufferedReader(new InputStreamReader(is));
-            StringBuilder sb = new StringBuilder();
-            String line;
-            while ((line = reader.readLine()) != null) {
-                sb.append(line).append("\n");
-            }
-            is.close();
-            String responseString = sb.toString();
+			if(followResponse.getStatusLine().getStatusCode() == 200) {
+				InputStream is = followResponse.getEntity().getContent();
+				BufferedReader reader = new BufferedReader(new InputStreamReader(is));
+				StringBuilder sb = new StringBuilder();
+				String line;
+				while ((line = reader.readLine()) != null) {
+					sb.append(line).append("\n");
+				}
+				is.close();
+				String responseString = sb.toString();
+				return new JSONObject(responseString);
+			}
+			else {
+				InputStream errorStream = followResponse.getEntity().getContent();
+				BufferedReader errorReader = new BufferedReader(new InputStreamReader(errorStream));
+				StringBuilder errorSb = new StringBuilder();
+				String errorLine;
+				while ((errorLine = errorReader.readLine()) != null) {
+					errorSb.append(errorLine).append("\n");
+				}
+				errorStream.close();
+				String errorResponse = errorSb.toString();
 
-			return new JSONObject(responseString);
+				log.error("It wasn't possible to successfully complete the oauth2/token.");
+				log.error("OAuth2 Token Endpoint returned non-200 status code: {}", followResponse.getStatusLine().getStatusCode());
+				log.error("Error response body: {}", errorResponse);
+
+				throw new Exception("It wasn't possible to successfully complete the oauth2/token. Response code: "
+					  + followResponse.getStatusLine().getStatusCode() + ". Body: " + errorResponse);
+			}
         }
     }
 }

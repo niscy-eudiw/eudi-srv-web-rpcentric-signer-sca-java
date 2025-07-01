@@ -14,11 +14,10 @@ the [EUDI Wallet Reference Implementation project description](https://github.co
   - [Sequence Diagrams](#sequence-diagrams)
     - [Credential Authorization](#credential-authorization)
   - [Endpoints](#endpoints)
-    - [Calculate Hash Endpoint](#calculate-hash-endpoint)
-    - [Obtain Signed Document Endpoint](#obtain-signed-document-endpoint)
+    - [Calculate Hash Endpoint](#sign-document-endpoint)
+    - [Obtain Signed Document Endpoint](#signature-callback-endpoint)
   - [Deployment](#deployment)
-    - [Requirements](#requirements)
-    - [Signature Creation Application](#signature-creation-application)
+  - [Docker Deployment](#docker-deployment)
   - [How to contribute](#how-to-contribute)
   - [License](#license)
     - [Third-party component licenses](#third-party-component-licenses)
@@ -106,13 +105,12 @@ title Document Signing
     SCA-->>-RP: returns signed document
 ```
 
-
 ## Endpoints
 
 ### Sign Document Endpoint
 
 * Method: POST
-* URL: http://localhost:8086/signatures/doc
+* URL: http://localhost:8088/signatures/doc
 
 This endpoint initiates the process to obtain a signed document. 
 
@@ -132,7 +130,7 @@ If the request is successful, the browser will be redirected to the OAuth 2.0 Au
 ### Signature Callback Endpoint
 
 * Method: GET
-* URL: http://localhost:8086/signatures/callback
+* URL: http://localhost:8088/signatures/callback
 
 This endpoint serves as the redirect endpoint, where the browser is redirected after the OAuth 2.0 Authorization process.
 
@@ -144,54 +142,213 @@ This endpoint displays an HTML page that allows the user to return to the RP pag
 
 ## Deployment
 
-### Requirements
-* Java version 17
-* Apache Maven 3.6.3
+### Prerequisites
 
-### Signature Creation Application
+- Java 17
+- Apache Maven 3.6.3
 
-1. **Create the application-oauth2.yml file**
+### Configure the OAuth2 Parameters
 
-    After creating the file **application-oauth2.yml** in the **src/main/resources** folder, add and complete the following data:
+In the file **aplication.yml** in the **src/main/resources** folder, you can see the structure with the following data:
 
-    ```
-    oauth-client:
-        client-id: "{client id}"
-        client-secret: "{client secret}"
-        redirect-uri: "http://localhost:8086/signatures/callback" # the endpoint of the SCA where to redirect after /oauth2/authorize
-        scope: "credential" 
-        client-authentication-methods: "client_secret_basic"
-        authorization-grant-types: "authorization_code"
-        authorization-server-url: "{authorization server}"
-        resource-server-url: "{resource server}"
-    ```
+```
+oauth-client:
+    client-id: ${OAUTH2_CLIENT_ID}
+    client-secret: ${OAUTH2_CLIENT_SECRET}
+    redirect-uri: ${OAUTH2_REDIRECT_URI}
+    scope: "credential"
+    authorization-grant-types: ${OAUTH2_AUTHORIZATION_GRANT_TYPE}
+    authorization-server-url: ${OAUTH2_AUTHORIZATION_SERVER_URL}
+    resource-server-url: ${OAUTH2_RESOURCE_SERVER_URL}
+```
 
-    The data added to the previous parameter should be retrieved from one QTSP with support for OAuth2, and that makes available the endpoints:
-    * credentials/info
-    * signatures/signHash
-    * oauth2/authorize
-    * oauth2/token
-    As defined in the CSC API Specification v2.0.2.
+From the previous parameters, you should define the environment variables "OAUTH2_CLIENT_ID", "OAUTH2_CLIENT_SECRET", "OAUTH2_REDIRECT_URI", "OAUTH2_AUTHORIZATION_GRANT_TYPE", "OAUTH2_AUTHORIZATION_SERVER_URL" and "OAUTH2_RESOURCE_SERVER_URL".
+You can configure this in two different ways:
 
-2. **Add the Timestamp Authority Information**
+**Option A: Use environment variables**
 
-    For certain conformance levels, access to a Timestamp Authority is required.
-   The Timestamp Authority to be used can be specified in the **application.yml** file located in the folder **src/main/resources/application.yml**.
-       
-    ```
-    timestamp-authority:
-        filename: # the path to the certificate of the Timestamp Authority chosen
-        server-url: # the url of the Timestamp Authority
-        supported-digest-algorithm: # the list of the digest algorithms that are supported by the TSA.
-        - Example: "2.16.840.1.101.3.4.2.1"
-   ```
+Added the previous mentioned environment variables to the **.env** file at the root of the project, in a format:
+```
+OAUTH2_CLIENT_ID= ...
+OAUTH2_CLIENT_SECRET= ...
+OAUTH2_REDIRECT_URI= 'this_service_url' + /signatures/callback
+OAUTH2_AUTHORIZATION_GRANT_TYPE= authorization_code
+OAUTH2_AUTHORIZATION_SERVER_URL= ...
+OAUTH2_RESOURCE_SERVER_URL= ...
+```
 
-3. **Run the Resource Server**
-   
-    After configuring the previously mentioned settings, navigate to the **tools** directory and run the script:
-   ```
-   ./deploy_sca.sh
-   ```
+To enable .env loading, ensure the following lines are **uncommented** in _application.yml_:
+
+```
+config:
+    import: file:.env[.properties]
+```
+
+**Option B: Edit the application.yml directly**
+
+Modify the value of the following parameters in the file at _src/main/resources/application.yml_:
+
+```
+oauth-client:
+  client-id: ...
+  client-secret: ...
+  redirect-uri: 'this_service_url' + /signatures/callback
+  scope: "credential"
+  authorization-grant-types: ... Ex: authorization_code
+  authorization-server-url: ...
+  resource-server-url: ...
+```
+
+The data added to the previous parameter should be retrieved from one QTSP with support for OAuth2, and that makes available the endpoints:
+* credentials/info
+* signatures/signHash
+* oauth2/authorize
+* oauth2/token
+As defined in the CSC API Specification v2.0.2.
+### Configure the Timestamp Authority
+
+For certain conformance levels, integration with a Timestamp Authority (TSA) is required.
+You can configure the TSA in two ways:
+
+**Option A: Use environment variables**
+
+Define the environment variables:
+
+- _TIMESTAMP_AUTHORITY_CERTIFICATE_FILEPATH_: Filepath to the TSA certificate
+- _TIMESTAMP_AUTHORITY_URL_: TSA endpoint URL
+- _TIMESTAMP_AUTHORITY_SUPPORTED_DIGEST_ALGS_: # List of the digest algorithms supported by the TSA
+
+These can be added to a **.env** file at the root of the project. To enable .env loading, ensure the following lines are **uncommented** in _application.yml_:
+
+```
+config:
+    import: file:.env[.properties]
+```
+
+**Option B: Edit the application.yml directly**
+
+Modify the value of the following parameters in the file at _src/main/resources/application.yml_:
+
+```
+timestamp-authority:
+    certificate-path: # Filepath to the TSA certificate
+    server-url: # TSA server URL
+    supported-digest-algorithm:# List of supported digest algorithms TSA.
+        - "2.16.840.1.101.3.4.2.1" # Example
+```
+### Run the Signature Creation Application (SCA)
+
+After configuring the above, navigate to the **tools** directory and run the script:
+
+```
+./deploy_sca.sh
+```
+
+## Docker Deployment
+
+You can also deploy the Wallet-Driven External SCA using Docker, either by:
+
+- Pulling the GitHub package image
+- Building the image locally
+
+### Prerequisites
+
+- Docker
+
+### Configure the OAuth2 Parameters
+
+From the previous parameters, you should define the environment variables "OAUTH2_CLIENT_ID", "OAUTH2_CLIENT_SECRET", "OAUTH2_REDIRECT_URI", "OAUTH2_AUTHORIZATION_GRANT_TYPE", "OAUTH2_AUTHORIZATION_SERVER_URL" and "OAUTH2_RESOURCE_SERVER_URL".
+You can configure this in two different ways:
+
+**Option A: Use environment variables**
+
+Added the environment variables "OAUTH2_CLIENT_ID", "OAUTH2_CLIENT_SECRET", "OAUTH2_REDIRECT_URI", "OAUTH2_AUTHORIZATION_GRANT_TYPE", "OAUTH2_AUTHORIZATION_SERVER_URL" and "OAUTH2_RESOURCE_SERVER_URL" to the **.env** file at the root of the project, in a format:
+```
+OAUTH2_CLIENT_ID= ...
+OAUTH2_CLIENT_SECRET= ...
+OAUTH2_REDIRECT_URI= 'this_service_url' + /signatures/callback
+OAUTH2_AUTHORIZATION_GRANT_TYPE= authorization_code
+OAUTH2_AUTHORIZATION_SERVER_URL= ...
+OAUTH2_RESOURCE_SERVER_URL= ...
+```
+
+The data added to the previous parameter should be retrieved from one QTSP with support for OAuth2, and that makes available the endpoints:
+* credentials/info
+* signatures/signHash
+* oauth2/authorize
+* oauth2/token
+As defined in the CSC API Specification v2.0.2.
+
+### Configure the Timestamp Authority
+
+To generate valid signed documents, the following TSA-related environment variables must be defined:
+
+- _TIMESTAMP_AUTHORITY_CERTIFICATE_FILEPATH_: Filepath to the TSA certificate
+- _TIMESTAMP_AUTHORITY_URL_: TSA endpoint URL
+- _TIMESTAMP_AUTHORITY_SUPPORTED_DIGEST_ALGS_: # List of the digest algorithms supported by the TSA
+
+These environment variables will need to be set up in a **.env** file presented next.
+
+### Set Up Environment Variables
+
+Create a **.env** file at the project root with the structure:
+
+```
+SPRING_PROFILES_ACTIVE=docker
+TIMESTAMP_AUTHORITY_CERTIFICATE_FILEPATH=# Filepath to the TSA certificate, ex: /certs/tsa.crt
+TIMESTAMP_AUTHORITY_URL=# TSA URL, ex: https://tsa.example.com
+TIMESTAMP_AUTHORITY_SUPPORTED_DIGEST_ALGS=# Supported Digest Algorithm, ex: 2.16.840.1.101.3.4.2.1,2.16.840.1.101.3.4.2.3
+OAUTH2_CLIENT_ID= # OAuth2 Client Id agreed with the QTSP
+OAUTH2_CLIENT_SECRET= # OAuth2 Client Secret agreed with the QTSP
+OAUTH2_REDIRECT_URI= # OAuth2 Redirect URI in this service. Ex: 'this_service_url'+/signatures/callback
+OAUTH2_AUTHORIZATION_GRANT_TYPE= authorization_code
+OAUTH2_AUTHORIZATION_SERVER_URL= # QTSP Authorization Server URL
+OAUTH2_RESOURCE_SERVER_URL= # QTSP Resource Server URL
+```
+
+Replace the placeholder values as needed.
+
+### Update docker-compose.yml
+
+To ensure the correct execution of the progress, you will need to update the _docker-compose.yml_ given.
+
+To mount the TSA certificate inside the container, update the volumes section:
+
+```
+volumes:
+    - {host_path_to_certificate}:{container_path_to_certificate}
+```
+
+Example:
+
+```
+volumes:
+- ./path/to/local/certs/tsa.crt:/certs/tsa.crt
+```
+
+**Note**: Ensure the value of _TIMESTAMP_AUTHORITY_CERTIFICATE_FILEPATH_ matches the container path.
+
+If you wish to use the pre-built image available on GitHub instead of building the image locally, modify the docker-compose.yml by replacing the build section with an image declaration like so:
+
+```
+services:
+  rp_centric_sca:
+    image: ghcr.io/eu-digital-identity-wallet/eudi-srv-web-rpcentric-signer-sca-java:latest
+    container_name: rp_centric_sca
+    ...
+```
+
+**Optional**: To avoid port conflicts, change the exposed port:
+
+```
+ports:
+    - "8088:8088" # Change first 8088 if the port is already used
+```
+
+### Build and Run with Docker
+
+From the project root, run:
+`docker compose up --build`
 
 ## How to contribute
 
