@@ -22,7 +22,9 @@ import eu.europa.ec.eudi.signer.r4.sca.web.dto.qtsp.oauth2.AuthorizeRequest;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.ArrayList;
 import java.util.Base64;
+import java.util.List;
 
 import eu.europa.ec.eudi.signer.r4.sca.web.dto.qtsp.oauth2.TokenRequest;
 import org.json.JSONObject;
@@ -50,8 +52,17 @@ public class OAuth2Service {
 	}
 
 	public String getOAuth2AuthorizeAuthenticationLocation(
-		  String authorizationServerUrl, String credentialId, String numSignatures, String hash, String hashAlgorithmOID,
+		  String authorizationServerUrl, String credentialId, String numSignatures, List<String> hashes, String hashAlgorithmOID,
 		  String state, String code_verifier) throws Exception {
+
+		List<String> base64URLEncodedString = new ArrayList<>();
+		for(String h: hashes) {
+			byte[] bytes = Base64.getDecoder().decode(h);
+			String base64urlEncoded = Base64.getUrlEncoder().encodeToString(bytes);
+			base64URLEncodedString.add(base64urlEncoded);
+		}
+
+		String hash = String.join(",", base64URLEncodedString);
 
 		// generate code_challenge, code_challenge_method, code_verifier
 		String code_challenge = generateNonce(code_verifier);

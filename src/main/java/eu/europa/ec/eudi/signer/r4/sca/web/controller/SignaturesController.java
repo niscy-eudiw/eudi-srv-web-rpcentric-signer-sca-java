@@ -98,11 +98,9 @@ public class SignaturesController {
         logger.info("Retrieved all the required certificates.");
 
         List<String> hashes;
-        String hash;
         try {
             hashes = this.signatureService.calculateHashValue(signatureRequest.getDocuments(), certificates.getCertificate(),
                   certificates.getCertificateChain(), certificates.getTsaCommonSource(), signatureRequest.getHashAlgorithmOID(), date);
-            hash = String.join(";", hashes.subList(0, hashes.size() - 1)) + (hashes.size() > 1 ? ";" : "") + hashes.get(hashes.size() - 1);
         }
         catch (Exception e){
             logger.error(e.getMessage());
@@ -119,7 +117,7 @@ public class SignaturesController {
         String location;
         try {
             location = this.oAuth2Service.getOAuth2AuthorizeAuthenticationLocation(
-                  authorizationServerUrl, signatureRequest.getCredentialID(), numSignatures, hash, signatureRequest.getHashAlgorithmOID(), session.getId(), code_verifier);
+                  authorizationServerUrl, signatureRequest.getCredentialID(), numSignatures, hashes, signatureRequest.getHashAlgorithmOID(), session.getId(), code_verifier);
         }
         catch (Exception e){
             logger.error(e.getMessage());

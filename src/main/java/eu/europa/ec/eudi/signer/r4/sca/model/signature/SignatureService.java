@@ -32,8 +32,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Base64;
@@ -74,8 +72,7 @@ public class SignatureService {
             if (dataToBeSigned == null) continue;
 
             String dataToBeSignedStringEncoded = Base64.getEncoder().encodeToString(dataToBeSigned);
-            String dataToBeSignedURLEncoded = URLEncoder.encode(dataToBeSignedStringEncoded, StandardCharsets.UTF_8);
-            hashes.add(dataToBeSignedURLEncoded);
+            hashes.add(dataToBeSignedStringEncoded);
         }
 
         fileLogger.info("DataToBeSigned successfully created");

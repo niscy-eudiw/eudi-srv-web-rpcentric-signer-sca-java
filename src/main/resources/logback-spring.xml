@@ -30,27 +30,30 @@
         <encoder>
             <pattern>%d{yyyy-MM-dd HH:mm:ss} %p %C{1}.%method:%line %logger{36}: - %msg%n%throwable</pattern> <!-- Log Format-->
         </encoder>
-
         <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <fileNamePattern>${LOGS}/archived/rpcentric_sca_logger-%d{yyyy-MM-dd}.log</fileNamePattern>
-            <maxFileSize>10MB</maxFileSize>
+            <fileNamePattern>${LOGS}/archived/rpcentric_sca_logger-%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <timeBasedFileNamingAndTriggeringPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP">
+                <maxFileSize>10MB</maxFileSize>
+            </timeBasedFileNamingAndTriggeringPolicy>
         </rollingPolicy>
     </appender>
 
-    <!--<root level="info">
-        <appender-ref ref="CONSOLE" />
-        <appender-ref ref="FILE" />
-    </root>-->
-
+    <springProfile name="docker">
+        <logger name="com.example" level="INFO"/>
+        <root level="INFO">
+            <appender-ref ref="FILE"/>
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
     <springProfile name="dev">
         <logger name="com.example" level="INFO"/>
         <root level="INFO">
             <appender-ref ref="FILE"/>
         </root>
     </springProfile>
-    <springProfile name="!dev">
-        <logger name="com.example" level="DEBUG"/>
-        <root level="DEBUG">
+    <springProfile name="!dev &amp; !docker">
+        <logger name="com.example" level="INFO"/>
+        <root level="INFO">
             <appender-ref ref="CONSOLE"/>
         </root>
     </springProfile>
