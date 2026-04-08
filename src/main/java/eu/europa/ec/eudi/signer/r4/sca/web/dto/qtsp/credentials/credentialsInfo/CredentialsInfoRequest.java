@@ -25,6 +25,12 @@ public class CredentialsInfoRequest {
     private String lang;
     private String clientData;
 
+    public CredentialsInfoRequest(String credentialID, String certificates, Boolean certInfo) {
+        this.credentialID = credentialID;
+        this.certificates = certificates;
+        this.certInfo = certInfo;
+    }
+
     public String getCredentialID() {
         return credentialID;
     }

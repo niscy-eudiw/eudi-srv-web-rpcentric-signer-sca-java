@@ -17,7 +17,10 @@
 package eu.europa.ec.eudi.signer.r4.sca.model.credential;
 
 import eu.europa.ec.eudi.signer.r4.sca.config.TimestampAuthorityConfig;
-import eu.europa.ec.eudi.signer.r4.sca.model.QTSPClient;
+import eu.europa.ec.eudi.signer.r4.sca.exception.SCAException.*;
+import eu.europa.ec.eudi.signer.r4.sca.exception.SCAException.CertificateChainCouldNotBeRetrieved;
+import eu.europa.ec.eudi.signer.r4.sca.exception.SCAException.CertificateBase64DecodingException;
+import eu.europa.ec.eudi.signer.r4.sca.client.QTSPClient;
 import eu.europa.ec.eudi.signer.r4.sca.web.dto.qtsp.credentials.credentialsInfo.CredentialsInfoRequest;
 import eu.europa.ec.eudi.signer.r4.sca.web.dto.qtsp.credentials.credentialsInfo.CredentialsInfoResponse;
 import eu.europa.esig.dss.model.x509.CertificateToken;
@@ -29,6 +32,9 @@ import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayInputStream;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
@@ -39,21 +45,39 @@ import java.util.List;
 public class CredentialsService {
     private final QTSPClient qtspClient;
     private final CertificateToken TSACertificateToken;
+    private final TimestampAuthorityConfig timestampAuthorityConfig;
     private static final Logger logger = LoggerFactory.getLogger(CredentialsService.class);
 
     public CredentialsService(@Autowired QTSPClient qtspClient,
-                              @Autowired TimestampAuthorityConfig trustedCertificateConfig) throws Exception{
+                              @Autowired TimestampAuthorityConfig timestampAuthorityConfig) throws MisconfigurationException{
         this.qtspClient = qtspClient;
+        this.timestampAuthorityConfig = timestampAuthorityConfig;
 
-        CertificateFactory certFactory = CertificateFactory.getInstance("X.509");
-        String certificateStringPath = trustedCertificateConfig.getCertificatePath();
-        if (certificateStringPath == null || certificateStringPath.isEmpty()) {
-            throw new Exception("Trusted Certificate Path not found in configuration file.");
+        try {
+            CertificateFactory certFactory = CertificateFactory.getInstance("X.509");
+            String certificateStringPath = timestampAuthorityConfig.getCertificatePath();
+            if (certificateStringPath == null || certificateStringPath.isEmpty()) {
+                throw new MisconfigurationException("Timestamp authority certificate path not found in configuration.", "timestamp-authority.certificate-path");
+            }
+            FileInputStream certInput = new FileInputStream(certificateStringPath);
+            X509Certificate TSACertificate = (X509Certificate) certFactory.generateCertificate(certInput);
+            this.TSACertificateToken = new CertificateToken(TSACertificate);
+            certInput.close();
         }
-        FileInputStream certInput= new FileInputStream(certificateStringPath);
-        X509Certificate TSACertificate = (X509Certificate) certFactory.generateCertificate(certInput);
-        this.TSACertificateToken = new CertificateToken(TSACertificate);
-        certInput.close();
+        catch (CertificateException e){
+            String message = "Failed to generate timestamp authority X.509 certificate. Certificate may be invalid or corrupted.";
+            logger.error("{} Error: {}", message, e.getMessage(), e);
+            throw new MisconfigurationException(message, "timestamp-authority.certificate-path");
+        } catch (FileNotFoundException e) {
+            String message = "Failed to find the timestamp authority X.509 certificate file.";
+            logger.error("{} Error: {}", message, e.getMessage(), e);
+            throw new MisconfigurationException(message, "timestamp-authority.certificate-path");
+        } catch (IOException e) {
+            String message = "Unexpected error when loading the timestamp authority certificate.";
+            logger.error("{} Error: {}", message, e.getMessage(), e);
+            throw new MisconfigurationException(message, "timestamp-authority.certificate-path");
+        }
+
     }
 
     public static class CertificateResponse {
@@ -95,8 +119,19 @@ public class CredentialsService {
 
     }
 
-    public CertificateResponse getCertificateAndChainAndCommonSource(String resourceServerUrl, String credentialId, String authorizationBearerHeader) throws Exception {
-        CertificateResponse response = getCertificateAndCertificateChain(resourceServerUrl, credentialId, authorizationBearerHeader);
+    // validate if the hashAlgorithmOID is supported by the TSA
+    public void checkHashAlgorithmOIDSupportedByTSA(String hashAlgorithmOID) throws HashAlgorithmOIDInvalidException {
+        if(!this.timestampAuthorityConfig.getSupportedDigestAlgorithm().contains(hashAlgorithmOID)){
+            String message = String.format("The hash algorithm OID '%s' is not supported by the TSA. Supported OIDs: %s",
+                  hashAlgorithmOID, timestampAuthorityConfig.getSupportedDigestAlgorithm());
+            logger.error(message);
+            throw new HashAlgorithmOIDInvalidException("The hashAlgorithmOID chosen is not supported by the TSA.");
+        }
+    }
+
+    public CertificateResponse getCertificateAndChainAndCommonSource(String resourceServerUrl, String accessToken, String credentialId)
+          throws CertificateChainCouldNotBeRetrieved, CertificateBase64DecodingException {
+        CertificateResponse response = getCertificateAndCertificateChain(resourceServerUrl, credentialId, accessToken);
         logger.info("Retrieved the signing certificate and the certificate chain.");
 
         CommonTrustedCertificateSource commonTrustedCertificateSource = getCommonTrustedCertificateSource();
@@ -106,43 +141,45 @@ public class CredentialsService {
     }
 
     // get the certificate and certificate chain of the credentialID
-    private CertificateResponse getCertificateAndCertificateChain(String resourceServerUrl, String credentialId, String authorizationHeader) throws Exception {
-        CredentialsInfoRequest infoRequest = new CredentialsInfoRequest();
-        infoRequest.setCredentialID(credentialId);
-        infoRequest.setCertificates("chain");
-        infoRequest.setCertInfo(true);
+    private CertificateResponse getCertificateAndCertificateChain(String resourceServerUrl, String credentialId, String authorizationHeader) throws CertificateChainCouldNotBeRetrieved, CertificateBase64DecodingException {
+        CredentialsInfoRequest infoRequest = new CredentialsInfoRequest(credentialId, "chain", true);
 
         CredentialsInfoResponse infoResponse = this.qtspClient.requestCredentialInfo(resourceServerUrl, authorizationHeader, infoRequest);
+        logger.info("Successfully retrieved certificates from {}", resourceServerUrl);
+
         List<String> certificates = infoResponse.getCert().getCertificates();
         List<String> keyAlgo = infoResponse.getKey().getAlgo();
 
         List<X509Certificate> x509Certificates = new ArrayList<>();
         for(String c: certificates){
-            try{
-                X509Certificate cert = base64DecodeCertificate(c);
-                logger.info("{}: {}", cert.getSubjectX500Principal(), cert.getSerialNumber());
-                x509Certificates.add(cert);
-            }
-            catch (Exception e){
-                logger.error(e.getMessage());
-                logger.error(e.getLocalizedMessage());
-                throw e;
-            }
+            X509Certificate cert = base64DecodeCertificate(c);
+            logger.info("{}: {}", cert.getSubjectX500Principal(), cert.getSerialNumber());
+            x509Certificates.add(cert);
         }
-        int i = x509Certificates.size() - 1;
-        logger.info("Number of certificate in chain: {}", i);
-        int size = x509Certificates.size();
-        return new CertificateResponse(x509Certificates.get(0), x509Certificates.subList(1, size), keyAlgo);
+        return new CertificateResponse(x509Certificates.get(0), x509Certificates.subList(1, x509Certificates.size()), keyAlgo);
     }
 
-    public X509Certificate base64DecodeCertificate(String certificate) throws Exception{
-        byte[] certificateBytes = Base64.getDecoder().decode(certificate);
-        ByteArrayInputStream inputStream  =  new ByteArrayInputStream(certificateBytes);
-        CertificateFactory certFactory = CertificateFactory.getInstance("X.509");
-        return (X509Certificate)certFactory.generateCertificate(inputStream);
+    private X509Certificate base64DecodeCertificate(String certificate) throws CertificateBase64DecodingException {
+        try {
+            byte[] certificateBytes = Base64.getDecoder().decode(certificate);
+            ByteArrayInputStream inputStream = new ByteArrayInputStream(certificateBytes);
+            CertificateFactory certFactory = CertificateFactory.getInstance("X.509");
+            X509Certificate certificateDecoded = (X509Certificate) certFactory.generateCertificate(inputStream);
+            logger.info("Successfully decoded X.509 certificate. Subject: {}", certificateDecoded.getSubjectX500Principal());
+            return certificateDecoded;
+        } catch (IllegalArgumentException e) {
+            String message = "Failed to decode the provided certificate. Input is not valid Base64.";
+            logger.error("{} Error: {}", message, e.getMessage(), e);
+            throw new CertificateBase64DecodingException(message);
+
+        } catch (CertificateException e) {
+            String message = "Failed to generate X.509 certificate from decoded bytes. Certificate may be invalid or corrupted.";
+            logger.error("{} Error: {}", message, e.getMessage(), e);
+            throw new CertificateBase64DecodingException(message);
+        }
     }
 
-    public CommonTrustedCertificateSource getCommonTrustedCertificateSource (){
+    public CommonTrustedCertificateSource getCommonTrustedCertificateSource(){
         CommonTrustedCertificateSource certificateSource = new CommonTrustedCertificateSource();
         certificateSource.addCertificate(this.TSACertificateToken);
         return certificateSource;
