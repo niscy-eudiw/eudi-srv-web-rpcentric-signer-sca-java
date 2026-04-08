@@ -33,6 +33,10 @@ public class CredentialsInfoCert {
     private String validFrom;
     // the validity end date from the end entity certificate
     private String validTo;
+    // array of OIDs formated as strings that SHALL contain any value of qcStatements field
+    private List<String> qcStatements;
+    // certificate policy OID under which the certificate was issued
+    private String policy;
 
     public String getStatus() {
         return status;
@@ -90,16 +94,34 @@ public class CredentialsInfoCert {
         this.validTo = validTo;
     }
 
+    public List<String> getQcStatements() {
+        return qcStatements;
+    }
+
+    public void setQcStatements(List<String> qcStatements) {
+        this.qcStatements = qcStatements;
+    }
+
+    public String getPolicy() {
+        return policy;
+    }
+
+    public void setPolicy(String policy) {
+        this.policy = policy;
+    }
+
     @Override
     public String toString() {
         return "CredentialsInfoCert{" +
-                "status='" + status + '\'' +
-                ", certificates=" + certificates +
-                ", issuerDN='" + issuerDN + '\'' +
-                ", serialNumber='" + serialNumber + '\'' +
-                ", subjectDN='" + subjectDN + '\'' +
-                ", validFrom='" + validFrom + '\'' +
-                ", validTo='" + validTo + '\'' +
-                '}';
+              "status='" + status + '\'' +
+              ", certificates=" + certificates +
+              ", issuerDN='" + issuerDN + '\'' +
+              ", serialNumber='" + serialNumber + '\'' +
+              ", subjectDN='" + subjectDN + '\'' +
+              ", validFrom='" + validFrom + '\'' +
+              ", validTo='" + validTo + '\'' +
+              ", qcStatements='" + qcStatements + '\'' +
+              ", policy='" + policy + '\'' +
+              '}';
     }
 }

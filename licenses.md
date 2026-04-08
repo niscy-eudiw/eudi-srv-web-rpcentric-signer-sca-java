@@ -16,9 +16,9 @@ _2025-01-13 12:11:20 CET_
 > -   **POM Project URL**: [https://spring.io/projects/spring-boot](https://spring.io/projects/spring-boot)
 > -   **POM License**: Apache License, Version 2.0 - [https://www.apache.org/licenses/LICENSE-2.0](https://www.apache.org/licenses/LICENSE-2.0)
 
-**3** **Group:** `org.springframework.boot` **Name:** `spring-boot-starter-security` **Version:** `3.5.0`
+**3** **Group:** `org.springframework.security` **Name:** `spring-security-web` **Version:** `6.3.0`
 
-> -   **POM Project URL**: [https://spring.io/projects/spring-boot](https://spring.io/projects/spring-boot)
+> -   **POM Project URL**: [https://spring.io/projects/spring-security](https://spring.io/projects/spring-security)
 > -   **POM License**: Apache License, Version 2.0 - [https://www.apache.org/licenses/LICENSE-2.0](https://www.apache.org/licenses/LICENSE-2.0)
 
 **4** **Group:** `org.springframework.boot` **Name:** `spring-boot-starter-thymeleaf` **Version:** `3.5.0`
