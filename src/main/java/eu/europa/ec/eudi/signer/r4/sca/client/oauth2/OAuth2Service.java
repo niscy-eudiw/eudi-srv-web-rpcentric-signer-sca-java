@@ -14,10 +14,10 @@
  limitations under the License.
  */
 
-package eu.europa.ec.eudi.signer.r4.sca.model.oauth2;
+package eu.europa.ec.eudi.signer.r4.sca.client.oauth2;
 
 import eu.europa.ec.eudi.signer.r4.sca.config.OAuthClientConfig;
-import eu.europa.ec.eudi.signer.r4.sca.model.QTSPClient;
+import eu.europa.ec.eudi.signer.r4.sca.client.QTSPClient;
 import eu.europa.ec.eudi.signer.r4.sca.web.dto.qtsp.oauth2.AuthorizeRequest;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -45,48 +45,51 @@ public class OAuth2Service {
 		this.oAuthClientConfig = oAuthClientConfig;
 	}
 
-	private String generateNonce(String root) throws Exception{
-		MessageDigest sha = MessageDigest.getInstance("SHA-256");
-		byte[] result = sha.digest(root.getBytes());
-		return Base64.getUrlEncoder().withoutPadding().encodeToString(result);
+	private String generateNonce(String codeChallengeMethod, String root) throws Exception{
+		if(codeChallengeMethod.equals("S256")) {
+			MessageDigest sha = MessageDigest.getInstance("SHA-256");
+			byte[] result = sha.digest(root.getBytes());
+			return Base64.getUrlEncoder().withoutPadding().encodeToString(result);
+		}
+		else {
+			return Base64.getUrlEncoder().withoutPadding().encodeToString(root.getBytes());
+		}
 	}
 
-	public String getOAuth2AuthorizeAuthenticationLocation(
-		  String authorizationServerUrl, String credentialId, String numSignatures, List<String> hashes, String hashAlgorithmOID,
-		  String state, String code_verifier) throws Exception {
+	public String getOAuth2AuthorizeAuthenticationLocation(String authorizationServerUrl, String credentialId,
+														   List<String> hashes, String hashAlgorithmOID,
+														   String state, String code_verifier) throws Exception {
+		AuthorizeRequest authorizeRequest = new AuthorizeRequest();
+
+		authorizeRequest.setResponse_type(URLEncoder.encode("code", StandardCharsets.UTF_8));
+		authorizeRequest.setClient_id(URLEncoder.encode(this.oAuthClientConfig.getClientId(), StandardCharsets.UTF_8));
+		authorizeRequest.setRedirect_uri(URLEncoder.encode(this.oAuthClientConfig.getRedirectUri(), StandardCharsets.UTF_8));
+		authorizeRequest.setScope(URLEncoder.encode(this.oAuthClientConfig.getScope(), StandardCharsets.UTF_8));
+		authorizeRequest.setLang(URLEncoder.encode("pt-PT", StandardCharsets.UTF_8));
+		authorizeRequest.setState(URLEncoder.encode(state, StandardCharsets.UTF_8));
+		authorizeRequest.setCredentialID(URLEncoder.encode(credentialId, StandardCharsets.UTF_8));
+		authorizeRequest.setHashAlgorithmOID(URLEncoder.encode(hashAlgorithmOID, StandardCharsets.UTF_8));
+
+		String numSignatures = Integer.toString(hashes.size());
+		authorizeRequest.setNumSignatures(URLEncoder.encode(numSignatures, StandardCharsets.UTF_8));
 
 		List<String> base64URLEncodedString = new ArrayList<>();
 		for(String h: hashes) {
 			byte[] bytes = Base64.getDecoder().decode(h);
 			String base64urlEncoded = Base64.getUrlEncoder().encodeToString(bytes);
-			base64URLEncodedString.add(base64urlEncoded);
+			logger.info(base64urlEncoded);
+			base64URLEncodedString.add(URLEncoder.encode(base64urlEncoded, StandardCharsets.UTF_8));
 		}
-
 		String hash = String.join(",", base64URLEncodedString);
+		authorizeRequest.setHashes(hash);
 
 		// generate code_challenge, code_challenge_method, code_verifier
-		String code_challenge = generateNonce(code_verifier);
+		String code_challenge = generateNonce("S256", code_verifier);
+		authorizeRequest.setCode_challenge(URLEncoder.encode(code_challenge, StandardCharsets.UTF_8));
+		authorizeRequest.setCode_challenge_method(URLEncoder.encode("S256", StandardCharsets.UTF_8));
 
-		AuthorizeRequest authorizeRequest = new AuthorizeRequest();
-		authorizeRequest.setResponse_type("code");
-		authorizeRequest.setClient_id(this.oAuthClientConfig.getClientId());
-		authorizeRequest.setRedirect_uri(this.oAuthClientConfig.getRedirectUri());
-		authorizeRequest.setScope(this.oAuthClientConfig.getScope());
-		authorizeRequest.setCode_challenge(code_challenge);
-		authorizeRequest.setCode_challenge_method("S256");
-		authorizeRequest.setLang("pt-PT");
-		authorizeRequest.setState(state);
-		authorizeRequest.setCredentialID(URLEncoder.encode(credentialId, StandardCharsets.UTF_8));
-		authorizeRequest.setNumSignatures(numSignatures);
-		authorizeRequest.setHashes(hash);
-		authorizeRequest.setHashAlgorithmOID(hashAlgorithmOID);
-
-		String asUrl;
-		if(authorizationServerUrl == null)
-			asUrl = this.oAuthClientConfig.getAuthorizationServerUrl();
-		else asUrl = authorizationServerUrl;
-
-		return this.qtspClient.requestOAuth2Authorize(asUrl, authorizeRequest);
+		if(authorizationServerUrl == null) authorizationServerUrl = this.oAuthClientConfig.getAuthorizationServerUrl();
+		return this.qtspClient.requestOAuth2Authorize(authorizationServerUrl, authorizeRequest);
 	}
 
 	private static String getBasicAuthenticationHeader(String username, String password) {
@@ -109,17 +112,14 @@ public class OAuth2Service {
 		return this.qtspClient.requestOAuth2Token(authorizationServerUrl, authorizationHeader, tokenRequest);
 	}
 
-	public String getOAuth2AccessToken(String authorizationServerUrl, String code, String codeVerifier) throws Exception{
-		String asUrl;
-		if(authorizationServerUrl == null)
-			asUrl = this.oAuthClientConfig.getAuthorizationServerUrl();
-		else asUrl = authorizationServerUrl;
+	public String getOAuth2AccessToken(String authorizationServerUrl, String code, String codeVerifier) throws Exception {
+		if(authorizationServerUrl == null) authorizationServerUrl = this.oAuthClientConfig.getAuthorizationServerUrl();
 
-		logger.info("Retrieving access token from Authorization Server {}, with code {}", asUrl, code);
-		JSONObject oauth2TokenResponse = getOAuth2Token(asUrl, code, codeVerifier);
+		logger.info("Retrieving access token from Authorization Server {}, with code {}", authorizationServerUrl, code);
+		JSONObject oauth2TokenResponse = getOAuth2Token(authorizationServerUrl, code, codeVerifier);
 		if(!oauth2TokenResponse.has("access_token")){
 			logger.error("Access token missing from OAuth2 Token Response.");
-			throw new Exception("Access token missing from OAuth2 Token Response.");
+			throw new Exception("There was an error trying to obtain the credential authorization. Please try again.");
 		}
 		return "Bearer "+oauth2TokenResponse.getString("access_token");
 	}

@@ -1,5 +1,15 @@
 # Changelog
 
+## [v0.4.0]
+_8 Apr 2026_
+
+### Changed
+- Improve exceptions to improve traceability.
+- Update Maven dependencies versions.
+
+### Fixed
+- Removed URL-encoding after document digest generation.
+
 ## [v0.3.0]
 
 _28 May 2025_

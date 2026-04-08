@@ -16,14 +16,11 @@
 
 package eu.europa.ec.eudi.signer.r4.sca.web.controller;
 
-import eu.europa.ec.eudi.signer.r4.sca.config.OAuthClientConfig;
 import eu.europa.ec.eudi.signer.r4.sca.model.credential.CredentialsService;
-import eu.europa.ec.eudi.signer.r4.sca.model.oauth2.OAuth2Service;
-import eu.europa.ec.eudi.signer.r4.sca.model.SessionState;
+import eu.europa.ec.eudi.signer.r4.sca.web.session.SessionState;
 import eu.europa.ec.eudi.signer.r4.sca.model.signature.SignatureService;
 import eu.europa.ec.eudi.signer.r4.sca.web.dto.SignatureDocumentRequest;
 import eu.europa.esig.dss.spi.x509.CommonTrustedCertificateSource;
-import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
@@ -34,8 +31,6 @@ import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 
-import java.io.IOException;
-import java.security.SecureRandom;
 import java.util.Date;
 import java.util.List;
 
@@ -45,143 +40,79 @@ import org.springframework.security.core.session.SessionRegistry;
 @RequestMapping(value = "/signatures")
 public class SignaturesController {
     private static final Logger logger = LoggerFactory.getLogger(SignaturesController.class);
-    private final OAuth2Service oAuth2Service;
     private final SignatureService signatureService;
     private final CredentialsService credentialsService;
     private final SessionRegistry sessionRegistry;
-    private final OAuthClientConfig oAuthClientConfig;
 
-    public SignaturesController(@Autowired OAuth2Service oAuth2Service, @Autowired SignatureService signatureService,
-                                @Autowired CredentialsService credentialsService, @Autowired SessionRegistry sessionRegistry,
-                                @Autowired OAuthClientConfig oAuthClientConfig) {
-        this.oAuth2Service = oAuth2Service;
+    public SignaturesController(@Autowired SignatureService signatureService, @Autowired CredentialsService credentialsService, @Autowired SessionRegistry sessionRegistry) {
         this.signatureService = signatureService;
         this.credentialsService = credentialsService;
         this.sessionRegistry = sessionRegistry;
-        this.oAuthClientConfig = oAuthClientConfig;
     }
 
-    @PostMapping(value="/doc")
-    public void signatureDoc(@RequestHeader(name="Authorization") String authorizationBearerHeader,
-                             @Valid @RequestBody SignatureDocumentRequest signatureRequest, HttpSession session,
-                             HttpServletResponse response) throws IOException {
-        logger.info("Request received for signature of a document.");
-
-        try{
-            this.signatureService.validateSignatureRequest(signatureRequest.getDocuments(), signatureRequest.getHashAlgorithmOID());
-        }catch (Exception e){
-            logger.error("Could not complete the Signature Request. The request is invalid. {}", e.getMessage());
-            response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Could not complete the Signature Request. The request is invalid. " + e.getMessage());
-            return;
-        }
-        logger.info("Validated the request received.");
-
-        Date date = new Date();
-
-        String authorizationServerUrl = signatureRequest.getAuthorizationServerUrl();
-        if(authorizationServerUrl == null)
-            authorizationServerUrl = this.oAuthClientConfig.getAuthorizationServerUrl();
-
-        String resourceServerUrl = signatureRequest.getResourceServerUrl();
-        if(resourceServerUrl == null)
-            resourceServerUrl = this.oAuthClientConfig.getResourceServerUrl();
-
-        CredentialsService.CertificateResponse certificates;
-        try {
-            certificates = this.credentialsService.getCertificateAndChainAndCommonSource(resourceServerUrl, signatureRequest.getCredentialID(), authorizationBearerHeader);
-        }
-        catch (Exception e){
-            logger.error(e.getMessage());
-            response.sendError(HttpServletResponse.SC_BAD_REQUEST, "There was an error obtaining the certificate. Please try again.");
-            return;
-        }
-        logger.info("Retrieved all the required certificates.");
-
-        List<String> hashes;
-        try {
-            hashes = this.signatureService.calculateHashValue(signatureRequest.getDocuments(), certificates.getCertificate(),
-                  certificates.getCertificateChain(), certificates.getTsaCommonSource(), signatureRequest.getHashAlgorithmOID(), date);
-        }
-        catch (Exception e){
-            logger.error(e.getMessage());
-            response.sendError(HttpServletResponse.SC_BAD_REQUEST, "There was an error calculating the document digest value. Please try again.");
-            return;
-        }
-        logger.info("Obtained the list of hashes.");
-
-        SecureRandom prng = new SecureRandom();
-        String code_verifier = String.valueOf(prng.nextInt());
-        logger.info("Obtained the code verifier value.");
-
-        String numSignatures = Integer.toString(hashes.size());
-        String location;
-        try {
-            location = this.oAuth2Service.getOAuth2AuthorizeAuthenticationLocation(
-                  authorizationServerUrl, signatureRequest.getCredentialID(), numSignatures, hashes, signatureRequest.getHashAlgorithmOID(), session.getId(), code_verifier);
-        }
-        catch (Exception e){
-            logger.error(e.getMessage());
-            response.sendError(HttpServletResponse.SC_BAD_REQUEST, "There was an error trying to obtain the credential authorization. Please try again.");
-            return;
-        }
+    @PostMapping(value="/doc", consumes = "application/json")
+    public String signatureDoc(@RequestHeader(name="Authorization") String authorizationBearerHeader, @Valid @RequestBody SignatureDocumentRequest signatureRequest, HttpSession session) throws Exception {
+        logger.info("Request received to sign a document.");
+        logger.debug("Request body: {}", signatureRequest);
 
         SessionState sessionState = new SessionState();
-        sessionState.setDate(date.getTime());
-        sessionState.setCredentialID(signatureRequest.getCredentialID());
+
+        String hashAlgorithmOID = signatureRequest.getHashAlgorithmOID();
+        this.credentialsService.checkHashAlgorithmOIDSupportedByTSA(hashAlgorithmOID);
+        this.signatureService.validateHashAlgorithmOID(hashAlgorithmOID);
+        sessionState.setHashAlgorithmOID(hashAlgorithmOID);
+        logger.info("Successfully validated request to /signatures/doc.");
+
+        String authorizationServerUrl = signatureRequest.getAuthorizationServerUrl();
+        sessionState.setAuthorizationServerUrl(authorizationServerUrl);
+
+        String resourceServerUrl = signatureRequest.getResourceServerUrl();
+        sessionState.setResourceServerUrl(resourceServerUrl);
+
+        String credentialID = signatureRequest.getCredentialID();
+        sessionState.setCredentialID(credentialID);
+        sessionState.setDocuments(signatureRequest.getDocuments());
+        sessionState.setRedirectUri(signatureRequest.getRedirectUri());
+
+        CredentialsService.CertificateResponse certificates =
+              this.credentialsService.getCertificateAndChainAndCommonSource(resourceServerUrl, authorizationBearerHeader, credentialID);
         sessionState.setEndEntityCertificate(certificates.getCertificate());
         sessionState.setCertificateChain(certificates.getCertificateChain());
         sessionState.setSignAlgo(certificates.getSignAlgo().get(0));
-        sessionState.setDocuments(signatureRequest.getDocuments());
-        sessionState.setHash(hashes);
-        sessionState.setHashAlgorithmOID(signatureRequest.getHashAlgorithmOID());
-        sessionState.setCodeVerifier(code_verifier);
-        sessionState.setAuthorizationServerUrl(authorizationServerUrl);
-        sessionState.setResourceServerUrl(resourceServerUrl);
-        sessionState.setRedirectUri(signatureRequest.getRedirectUri());
+        logger.info("Retrieved all the required certificates.");
+
+        Date date = new Date();
+        sessionState.setDate(date.getTime());
+
+        String location = this.signatureService.getHashesAndOAuth2AuthorizeCredential(sessionState, session.getId(), authorizationServerUrl, credentialID,
+              signatureRequest.getDocuments(), certificates.getCertificate(), certificates.getCertificateChain(),
+              certificates.getTsaCommonSource(), hashAlgorithmOID, date);
+        logger.info("Successfully retrieved oauth2 authorization url.");
 
         session.setAttribute("signatureState", sessionState);
         this.sessionRegistry.registerNewSession(session.getId(), session);
 
-        response.sendRedirect(location);
+        return "redirect:"+location;
     }
 
     @GetMapping(value="/callback")
-    public String credential_authorization_code(@RequestParam("code") String code, @RequestParam("state") String state, Model model, HttpServletResponse response) throws IOException {
+    public String credentialAuthorizationCode(@RequestParam("code") String code, @RequestParam("state") String state, Model model) throws Exception {
+        logger.info("Request received to continue signing a document.");
+
         SessionInformation sessionInformation = this.sessionRegistry.getSessionInformation(state);
         HttpSession session = (HttpSession) sessionInformation.getPrincipal();
         SessionState sessionState = (SessionState) session.getAttribute("signatureState");
-
-        logger.info("Received request with code {}", code);
-
-        String access_token;
-        try {
-            access_token = this.oAuth2Service.getOAuth2AccessToken(sessionState.getAuthorizationServerUrl(), code, sessionState.getCodeVerifier());
-        }
-        catch (Exception e){
-            logger.error(e.getMessage());
-            response.sendError(HttpServletResponse.SC_BAD_REQUEST, "There was an error trying to obtain the credential authorization. Please try again.");
-            return null;
-        }
-        logger.info("Obtained Access Token with scope Credential.");
+        logger.info("Retrieved the session state.");
 
         CommonTrustedCertificateSource certificateSource = this.credentialsService.getCommonTrustedCertificateSource();
-        logger.info("Loaded certificate source.");
+        logger.info("Loaded Certificate Source.");
 
         Date date = new Date(sessionState.getDate());
-
-        List<String> signaturesResponse;
-        try {
-            signaturesResponse = this.signatureService.handleDocumentsSignDocRequest(
-                  sessionState.getResourceServerUrl(), access_token, sessionState.getDocuments(), sessionState.getHash(),
-                  sessionState.getCredentialID(), sessionState.getEndEntityCertificate(), sessionState.getCertificateChain(),
-                  certificateSource, sessionState.getSignAlgo(), sessionState.getHashAlgorithmOID(), date);
-            logger.info("Obtained the documents signed.");
-        }
-        catch (Exception e){
-            logger.error(e.getMessage());
-            response.sendError(HttpServletResponse.SC_BAD_REQUEST, "There was an error trying to obtain the signed document. Please try again.");
-            return null;
-        }
+        List<String> signaturesResponse = this.signatureService.getAccessTokenAndSignDocument(sessionState.getAuthorizationServerUrl(), sessionState.getResourceServerUrl(),
+              code, sessionState.getCodeVerifier(), sessionState.getDocuments(), sessionState.getHash(), sessionState.getCredentialID(),
+              sessionState.getEndEntityCertificate(), sessionState.getCertificateChain(), certificateSource, sessionState.getSignAlgo(),
+              sessionState.getHashAlgorithmOID(), date);
+        logger.info("Obtained the documents signed.");
 
         String signed_document_base64 = signaturesResponse.get(0);
         String redirect_uri = sessionState.getRedirectUri();
