@@ -17,7 +17,9 @@
 package eu.europa.ec.eudi.signer.r4.sca.model.signature;
 
 import eu.europa.ec.eudi.signer.r4.sca.config.TimestampAuthorityConfig;
-import eu.europa.esig.dss.AbstractSignatureParameters;
+import eu.europa.ec.eudi.signer.r4.sca.exception.SCAException.*;
+import eu.europa.ec.eudi.signer.r4.sca.web.dto.qtsp.signatures.signDoc.DocumentsSignDocRequest;
+import eu.europa.esig.dss.signature.AbstractSignatureParameters;
 import eu.europa.esig.dss.alert.ExceptionOnStatusAlert;
 import eu.europa.esig.dss.alert.LogOnStatusAlert;
 import eu.europa.esig.dss.asic.cades.ASiCWithCAdESSignatureParameters;
@@ -52,10 +54,10 @@ import eu.europa.esig.dss.service.tsp.OnlineTSPSource;
 import eu.europa.esig.dss.signature.DocumentSignatureService;
 import eu.europa.esig.dss.signature.MultipleDocumentsSignatureService;
 import eu.europa.esig.dss.spi.x509.CommonTrustedCertificateSource;
-import eu.europa.esig.dss.validation.CertificateVerifier;
-import eu.europa.esig.dss.validation.CommonCertificateVerifier;
-import eu.europa.esig.dss.validation.OCSPFirstRevocationDataLoadingStrategyFactory;
-import eu.europa.esig.dss.validation.RevocationDataVerifier;
+import eu.europa.esig.dss.spi.validation.CertificateVerifier;
+import eu.europa.esig.dss.spi.validation.CommonCertificateVerifier;
+import eu.europa.esig.dss.spi.validation.OCSPFirstRevocationDataLoadingStrategyFactory;
+import eu.europa.esig.dss.spi.validation.RevocationDataVerifier;
 
 import java.awt.*;
 import java.io.IOException;
@@ -67,8 +69,10 @@ import java.util.List;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
+import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.bouncycastle.asn1.x500.RDN;
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.asn1.x500.style.BCStyle;
@@ -87,21 +91,108 @@ public class DSSService {
 		this.trustedCertificateConfig = trustedCertificateConfig;
 	}
 
+	/*
+	 * Function that returns the digest of the data to be signed from the document and parameters received
+	 */
+	@SuppressWarnings({ "rawtypes", "unchecked" })
+	public byte[] getDigestOfDataToBeSigned(DocumentsSignDocRequest document, String hashAlgorithmOID, X509Certificate certificate, Date date,
+											CommonTrustedCertificateSource certificateSource, List<X509Certificate> certificateChain)
+		  throws DocumentSignDocParameterInvalidException, UnsupportedSignatureFormatException {
 
-    public static SignatureLevel getSignatureLevel(String conformance_level, String signature_format) throws Exception {
-        String enumValue = getSignatureLevelFromSignatureFormatAndConformanceLevel(conformance_level, signature_format);
+		SignatureDocumentForm form = getSignatureDocumentForm(document, hashAlgorithmOID, certificate, date, certificateSource, certificateChain);
+
+		DocumentSignatureService service = getSignatureService(form.getContainerType(), form.getSignatureForm(), form.getTrustedCertificates());
+
+		AbstractSignatureParameters parameters = fillParameters(form);
+
+		ToBeSigned toBeSigned;
+		if(form.getSignatureForm().equals(SignatureForm.PAdES)) {
+			setImageSignedPDF((PAdESService) service, (PAdESSignatureParameters) parameters, form);
+		}
+		toBeSigned = service.getDataToSign(form.getDocumentToSign(), parameters);
+		logger.info("Successfully retrieved dataToSign.");
+		return DSSUtils.digest(parameters.getDigestAlgorithm(), toBeSigned.getBytes());
+	}
+
+	@SuppressWarnings({ "rawtypes", "unchecked" })
+	public DSSDocument signDocument(DocumentsSignDocRequest document, String hashAlgorithmOID, X509Certificate certificate, Date date,
+									CommonTrustedCertificateSource certificateSource, List<X509Certificate> certificateChain, String signature)
+		  throws DocumentSignDocParameterInvalidException, UnsupportedSignatureFormatException {
+		SignatureDocumentForm form = getSignatureDocumentForm(document, hashAlgorithmOID, certificate, date, certificateSource, certificateChain);
+		form.setSignatureValue(Base64.getDecoder().decode(signature));
+
+		DocumentSignatureService service = getSignatureService(form.getContainerType(), form.getSignatureForm(), form.getTrustedCertificates());
+
+		AbstractSignatureParameters parameters = fillParameters(form);
+
+		SignatureValue signatureValue = new SignatureValue();
+		signatureValue.setAlgorithm(SignatureAlgorithm.getAlgorithm(form.getEncryptionAlgorithm(), form.getDigestAlgorithm()));
+		signatureValue.setValue(form.getSignatureValue());
+		logger.info("Successfully created the SignatureValue");
+
+		if(form.getSignatureForm().equals(SignatureForm.PAdES)) {
+			setImageSignedPDF((PAdESService) service, (PAdESSignatureParameters) parameters, form);
+		}
+		DSSDocument signedDocument = service.signDocument(form.getDocumentToSign(), parameters, signatureValue);
+		logger.info("Successfully retrieved signed document.");
+		return signedDocument;
+	}
+
+	private SignatureDocumentForm getSignatureDocumentForm(DocumentsSignDocRequest document, String hashAlgorithmOID, X509Certificate certificate, Date date,
+												   CommonTrustedCertificateSource certificateSource, List<X509Certificate> certificateChain) throws DocumentSignDocParameterInvalidException {
+
+		SignatureDocumentForm signatureDocumentForm = new SignatureDocumentForm();
+
+		DSSDocument dssDocument = loadDssDocument(document.getDocument(), document.getDocument_name());
+		signatureDocumentForm.setDocumentToSign(dssDocument);
+		logger.debug("Loaded Base64-encoded document to sign as DSSDocument");
+
+		SignaturePackaging signaturePackaging = getSignaturePackaging(document.getSigned_envelope_property());
+		signatureDocumentForm.setSignaturePackaging(signaturePackaging);
+		ASiCContainerType asicContainerType = getASiCContainerType(document.getContainer());
+		signatureDocumentForm.setContainerType(asicContainerType);
+		SignatureLevel signatureLevel = getSignatureLevel(document.getConformance_level(), document.getSignature_format());
+		signatureDocumentForm.setSignatureLevel(signatureLevel);
+		SignatureForm signatureFormat = getSignatureForm(document.getSignature_format());
+		signatureDocumentForm.setSignatureForm(signatureFormat);
+
+		DigestAlgorithm digestAlgorithm = getDigestAlgorithmFromOID(hashAlgorithmOID);
+		signatureDocumentForm.setDigestAlgorithm(digestAlgorithm);
+
+		signatureDocumentForm.setCertificate(certificate);
+		signatureDocumentForm.setCertChain(certificateChain);
+		EncryptionAlgorithm encryptionAlgorithm = EncryptionAlgorithm.forName(certificate.getPublicKey().getAlgorithm());
+		signatureDocumentForm.setEncryptionAlgorithm(encryptionAlgorithm);
+		signatureDocumentForm.setTrustedCertificates(certificateSource);
+		signatureDocumentForm.setDate(date);
+
+		logger.info("Successfully created the DocumentSignatureForm.");
+
+		return signatureDocumentForm;
+	}
+
+	private DSSDocument loadDssDocument(String document, String filename) {
+		byte[] dataDocument = Base64.getDecoder().decode(document);
+		if(filename == null)
+			return new InMemoryDocument(dataDocument);
+		else
+			return new InMemoryDocument(dataDocument, filename);
+	}
+
+	private static SignatureLevel getSignatureLevel(String conformance_level, String signature_format) throws DocumentSignDocParameterInvalidException {
+		String enumValue = getSignatureLevelFromSignatureFormatAndConformanceLevel(conformance_level, signature_format);
 		return SignatureLevel.valueByName(enumValue);
-    }
+	}
 
-    private static String getSignatureLevelFromSignatureFormatAndConformanceLevel(String conformance_level, String signature_format) throws Exception {
-        String prefix = switch (signature_format) {
+	private static String getSignatureLevelFromSignatureFormatAndConformanceLevel(String conformance_level, String signature_format) throws DocumentSignDocParameterInvalidException {
+		String prefix = switch (signature_format) {
 			case "P" -> "PAdES_BASELINE_";
 			case "C" -> "CAdES_BASELINE_";
 			case "J" -> "JAdES_BASELINE_";
 			case "X" -> "XAdES_BASELINE_";
 			default -> {
 				logger.error("Signature Format in request is invalid.");
-				throw new Exception("The signature format received is invalid.");
+				throw new DocumentSignDocParameterInvalidException("The signature format received is invalid.", "signature_format");
 			}
 		};
 
@@ -112,12 +203,12 @@ public class DSSService {
 			case "Ades-B-T" -> prefix + "T";
 			default -> {
 				logger.error("Conformance Level in request is invalid.");
-				throw new Exception("The conformance level received is invalid.");
+				throw new DocumentSignDocParameterInvalidException("The conformance level received is invalid.", "conformance_level");
 			}
 		};
-    }
+	}
 
-    public static SignatureForm getSignatureForm(String signature_format) throws Exception {
+	private static SignatureForm getSignatureForm(String signature_format) throws DocumentSignDocParameterInvalidException {
 		return switch (signature_format) {
 			case "P" -> SignatureForm.PAdES;
 			case "C" -> SignatureForm.CAdES;
@@ -125,17 +216,17 @@ public class DSSService {
 			case "X" -> SignatureForm.XAdES;
 			default -> {
 				logger.error("signature_format is an invalid value.");
-				throw new Exception("The signature_format received is invalid");
+				throw new DocumentSignDocParameterInvalidException("The signature_format received is invalid", "signature_format");
 			}
 		};
-    }
+	}
 
-    public static DigestAlgorithm getDigestAlgorithmFromOID(String algorithmOID) throws Exception{
+	static DigestAlgorithm getDigestAlgorithmFromOID(String algorithmOID) throws DocumentSignDocParameterInvalidException{
 		try {
 			return DigestAlgorithm.forOID(algorithmOID);
 		}
 		catch (IllegalArgumentException e){
-			logger.info("Session_id:{}, hashAlgorithmOID given doesn't match a DigestAlgorithm. Try to load SignatureAlgorithm.", RequestContextHolder.currentRequestAttributes().getSessionId());
+			logger.info("HashAlgorithmOID given doesn't match a DigestAlgorithm. Try to load SignatureAlgorithm.");
 
 			try {
 				SignatureAlgorithm signatureAlgorithm = SignatureAlgorithm.forOID(algorithmOID);
@@ -143,24 +234,24 @@ public class DSSService {
 			}
 			catch (IllegalArgumentException e1){
 				logger.error("Session_id:{},Signature Digest Algorithm invalid.", RequestContextHolder.currentRequestAttributes().getSessionId());
-				throw new Exception("A DigestAlgorithm was not found from the hashAlgorithmOID.");
+				throw new DocumentSignDocParameterInvalidException("A valid DigestAlgorithm was not found from the hashAlgorithmOID.", "hashAlgorithmOID");
 			}
 		}
-    }
+	}
 
-    public static ASiCContainerType getASiCContainerType(String container) throws Exception {
+	private static ASiCContainerType getASiCContainerType(String container) throws DocumentSignDocParameterInvalidException {
 		return switch (container) {
 			case "No" -> null;
 			case "ASiC-E" -> ASiCContainerType.ASiC_E;
 			case "ASiC-S" -> ASiCContainerType.ASiC_S;
 			default -> {
 				logger.error("ASiC Container Type received is invalid.");
-				throw new Exception("The ASiC Container Type is not supported.");
+				throw new DocumentSignDocParameterInvalidException("The ASiC Container Type is not supported.", "container");
 			}
 		};
-    }
+	}
 
-    public static SignaturePackaging getSignaturePackaging(String signedEnvelopeProperty) throws Exception {
+	private static SignaturePackaging getSignaturePackaging(String signedEnvelopeProperty) throws DocumentSignDocParameterInvalidException {
 		return switch (signedEnvelopeProperty) {
 			case "ENVELOPED" -> SignaturePackaging.ENVELOPED;
 			case "ENVELOPING" -> SignaturePackaging.ENVELOPING;
@@ -168,72 +259,36 @@ public class DSSService {
 			case "INTERNALLY_DETACHED" -> SignaturePackaging.INTERNALLY_DETACHED;
 			default -> {
 				logger.error("The signature packaging received is invalid.");
-				throw new Exception("The signedEnvelopeProperty received doesn't match any of the Signature Packaging supported.");
+				throw new DocumentSignDocParameterInvalidException("The signedEnvelopeProperty received doesn't match any of the Signature Packaging supported.", "signed_envelope_property");
 			}
 		};
-    }
-
-    public DSSDocument loadDssDocument(String document, String filename) {
-        byte[] dataDocument = Base64.getDecoder().decode(document);
-		if(filename == null)
-        	return new InMemoryDocument(dataDocument);
-		else
-			return new InMemoryDocument(dataDocument, filename);
-    }
-
-    /*
-     * Function that returns the digest of the data to be signed from the document and parameters received
-     */
-    public byte[] getDigestOfDataToBeSigned(SignatureDocumentForm form) throws IOException {
-        DocumentSignatureService service = getSignatureService(form.getContainerType(), form.getSignatureForm(), form.getTrustedCertificates());
-		logger.info("Session_id:{},DataToBeSignedData Service created.", RequestContextHolder.currentRequestAttributes().getSessionId());
-
-        AbstractSignatureParameters parameters = fillParameters(form);
-		logger.info("Session_id:{},DataToBeSignedData Parameters Filled.", RequestContextHolder.currentRequestAttributes().getSessionId());
-
-        DSSDocument toSignDocument = form.getDocumentToSign();
-
-        ToBeSigned toBeSigned;
-		if(form.getSignatureForm().equals(SignatureForm.PAdES)) {
-			PAdESService s = (PAdESService) service;
-			PAdESSignatureParameters p = (PAdESSignatureParameters) parameters;
-			SignatureImageParameters imageParameters = setVisualSignature(toSignDocument, form.getCertificate(), form.getDate());
-			p.setImageParameters(imageParameters);
-			s.setPdfObjFactory(new PdfBoxNativeObjectFactory());
-		}
-		toBeSigned = service.getDataToSign(toSignDocument, parameters);
-		return DSSUtils.digest(parameters.getDigestAlgorithm(), toBeSigned.getBytes());
-    }
-
-    @SuppressWarnings({ "rawtypes", "unchecked" })
-    public DSSDocument signDocument(SignatureDocumentForm form) throws IOException {
-        DocumentSignatureService service = getSignatureService(form.getContainerType(), form.getSignatureForm(), form.getTrustedCertificates());
-		logger.trace("DocumentSignatureService created.");
-
-        AbstractSignatureParameters parameters = fillParameters(form);
-		logger.trace("AbstractSignatureParameters Filled.");
-
-        DSSDocument toSignDocument = form.getDocumentToSign();
-
-        SignatureValue signatureValue = new SignatureValue();
-        signatureValue.setAlgorithm(SignatureAlgorithm.getAlgorithm(form.getEncryptionAlgorithm(), form.getDigestAlgorithm()));
-        signatureValue.setValue(form.getSignatureValue());
-
-		if(form.getSignatureForm().equals(SignatureForm.PAdES)) {
-			PAdESService s = (PAdESService) service;
-			PAdESSignatureParameters p = (PAdESSignatureParameters) parameters;
-			SignatureImageParameters imageParameters = setVisualSignature(toSignDocument, form.getCertificate(), form.getDate());
-			p.setImageParameters(imageParameters);
-			s.setPdfObjFactory(new PdfBoxNativeObjectFactory());
-			return s.signDocument(toSignDocument, p, signatureValue);
-		}
-		else return service.signDocument(toSignDocument, parameters, signatureValue);
-    }
-
+	}
 
 	@SuppressWarnings("rawtypes")
-	private DocumentSignatureService getSignatureService(ASiCContainerType containerType, SignatureForm signatureForm, CommonTrustedCertificateSource trustedCertificates) {
+	private DocumentSignatureService getSignatureService(ASiCContainerType containerType, SignatureForm signatureForm, CommonTrustedCertificateSource trustedCertificates) throws UnsupportedSignatureFormatException {
+		CertificateVerifier cv = getCertificateVerifier(trustedCertificates);
 
+		DocumentSignatureService service;
+		if (containerType != null) {
+			service = (DocumentSignatureService) getASiCSignatureService(signatureForm, cv);
+		} else {
+			service = switch (signatureForm) {
+				case CAdES -> new CAdESService(cv);
+				case PAdES -> new PAdESService(cv);
+				case XAdES -> new XAdESService(cv);
+				case JAdES -> new JAdESService(cv);
+				default -> {
+					logger.error(String.format("The signature format %s is not supported", signatureForm));
+					throw new UnsupportedSignatureFormatException(String.format("The signature format %s is not supported", signatureForm));
+				}
+			};
+		}
+		service.setTspSource(getTspSource());
+		logger.info("Successfully created the DocumentSignatureService");
+		return service;
+	}
+
+	private static CertificateVerifier getCertificateVerifier(CommonTrustedCertificateSource TrustedCertificates) {
 		OnlineCRLSource onlineCRLSource = new OnlineCRLSource();
 		onlineCRLSource.setDataLoader(new CommonsDataLoader());
 
@@ -243,29 +298,6 @@ public class DSSService {
 
 		RevocationDataVerifier revocationDataVerifier = RevocationDataVerifier.createDefaultRevocationDataVerifier();
 
-		CertificateVerifier cv = getCertificateVerifier(trustedCertificates, onlineCRLSource, revocationDataVerifier);
-
-		DocumentSignatureService service;
-		if (containerType != null) { // container != No
-			service = (DocumentSignatureService) getASiCSignatureService(signatureForm, cv);
-		} else {
-			service = switch (signatureForm) {
-				case CAdES -> new CAdESService(cv);
-				case PAdES -> new PAdESService(cv);
-				case XAdES -> new XAdESService(cv);
-				case JAdES -> new JAdESService(cv);
-				default -> throw new IllegalArgumentException(String.format("Unknown signature format : %s", signatureForm));
-			};
-		}
-
-		String tspServer = this.trustedCertificateConfig.getServerUrl();
-		OnlineTSPSource onlineTSPSource = new OnlineTSPSource(tspServer);
-		onlineTSPSource.setDataLoader(new TimestampDataLoader());
-		service.setTspSource(onlineTSPSource);
-		return service;
-	}
-
-	private static CertificateVerifier getCertificateVerifier(CommonTrustedCertificateSource TrustedCertificates, OnlineCRLSource onlineCRLSource, RevocationDataVerifier revocationDataVerifier) {
 		CertificateVerifier cv = new CommonCertificateVerifier();
 		cv.setTrustedCertSources(TrustedCertificates);
 		cv.setCheckRevocationForUntrustedChains(false);
@@ -277,36 +309,107 @@ public class DSSService {
 		cv.setAlertOnRevokedCertificate(new ExceptionOnStatusAlert());
 		cv.setAlertOnInvalidTimestamp(new ExceptionOnStatusAlert());
 		cv.setAlertOnNoRevocationAfterBestSignatureTime(new LogOnStatusAlert(Level.ERROR));
-		cv.setAlertOnExpiredSignature(new ExceptionOnStatusAlert());
+		cv.setAlertOnExpiredCertificate(new ExceptionOnStatusAlert());
 		cv.setRevocationDataLoadingStrategyFactory(new OCSPFirstRevocationDataLoadingStrategyFactory());
 		cv.setRevocationDataVerifier(revocationDataVerifier);
 		cv.setRevocationFallback(true);
 		return cv;
 	}
 
+	@SuppressWarnings("rawtypes")
+	private MultipleDocumentsSignatureService getASiCSignatureService(SignatureForm signatureForm, CertificateVerifier cv) throws UnsupportedSignatureFormatException {
+		return switch (signatureForm) {
+			case CAdES -> new ASiCWithCAdESService(cv);
+			case XAdES -> new ASiCWithXAdESService(cv);
+			default -> {
+				logger.error(String.format("Signature form selected for an ASiC container (%s) is not supported", signatureForm));
+				throw new UnsupportedSignatureFormatException(
+					  String.format("Signature form selected for an ASiC container (%s) is not supported", signatureForm));
+			}
+		};
+	}
 
-
+	private OnlineTSPSource getTspSource(){
+		String tspServer = this.trustedCertificateConfig.getServerUrl();
+		OnlineTSPSource onlineTSPSource = new OnlineTSPSource(tspServer);
+		onlineTSPSource.setDataLoader(new TimestampDataLoader());
+		return onlineTSPSource;
+	}
 
 	@SuppressWarnings({ "rawtypes" })
-	private AbstractSignatureParameters fillParameters(SignatureDocumentForm form) {
-		AbstractSignatureParameters parameters = getSignatureParameters(form.getContainerType(),  form.getSignatureForm(), form.getSignaturePackaging(), form.getDocumentToSign(), form.getDigestAlgorithm());
+	private AbstractSignatureParameters fillParameters(SignatureDocumentForm form) throws UnsupportedSignatureFormatException {
+		AbstractSignatureParameters parameters = getSignatureParameters(form.getContainerType(),  form.getSignatureForm());
 		fillParameters(parameters, form);
+		logger.info("Successfully set up SignatureParameters");
+		return parameters;
+	}
+
+	@SuppressWarnings({ "rawtypes" })
+	private AbstractSignatureParameters getSignatureParameters(ASiCContainerType containerType, SignatureForm signatureForm) throws UnsupportedSignatureFormatException {
+		AbstractSignatureParameters parameters;
+		if (containerType != null)
+			return getASiCSignatureParameters(containerType, signatureForm);
+		switch (signatureForm) {
+			case CAdES:
+				parameters = new CAdESSignatureParameters();
+				break;
+			case PAdES:
+				PAdESSignatureParameters padesParams = new PAdESSignatureParameters();
+				padesParams.setContentSize(9472 * 2); // double reserved space for signature
+				parameters = padesParams;
+				break;
+			case XAdES:
+				parameters = new XAdESSignatureParameters();
+				break;
+			case JAdES:
+				JAdESSignatureParameters jadesParameters = new JAdESSignatureParameters();
+				jadesParameters.setJwsSerializationType(JWSSerializationType.JSON_SERIALIZATION);
+				jadesParameters.setSigDMechanism(SigDMechanism.OBJECT_ID_BY_URI_HASH); // to use by default
+				parameters = jadesParameters;
+				break;
+			default:
+				logger.error("Unknown signature format : {}", signatureForm);
+				throw new UnsupportedSignatureFormatException(String.format("Unknown signature format : %s", signatureForm));
+		}
 
 		return parameters;
 	}
 
+	@SuppressWarnings({ "rawtypes" })
+	private AbstractSignatureParameters getASiCSignatureParameters(ASiCContainerType containerType, SignatureForm signatureForm) throws UnsupportedSignatureFormatException {
+		AbstractSignatureParameters parameters;
+		switch (signatureForm) {
+			case CAdES:
+				ASiCWithCAdESSignatureParameters asicCadesParams = new ASiCWithCAdESSignatureParameters();
+				asicCadesParams.aSiC().setContainerType(containerType);
+				parameters = asicCadesParams;
+				break;
+			case XAdES:
+				ASiCWithXAdESSignatureParameters asicXadesParams = new ASiCWithXAdESSignatureParameters();
+				asicXadesParams.aSiC().setContainerType(containerType);
+				parameters = asicXadesParams;
+				break;
+			default:
+				logger.error(String.format("Signature format selected for an ASiC container (%s) is not supported", signatureForm));
+				throw new UnsupportedSignatureFormatException(
+					  String.format("Signature format selected for an ASiC container (%s) is not supported", signatureForm));
+		}
+		return parameters;
+	}
+
 	@SuppressWarnings({ "rawtypes", "unchecked" })
-	private void fillParameters(AbstractSignatureParameters parameters, SignatureDocumentForm form) {
+	private void fillParameters(AbstractSignatureParameters parameters, SignatureDocumentForm form) throws UnsupportedSignatureFormatException {
 		parameters.setSignaturePackaging(form.getSignaturePackaging());
 		parameters.setSignatureLevel(form.getSignatureLevel());
 		parameters.setDigestAlgorithm(form.getDigestAlgorithm());
+		parameters.setEncryptionAlgorithm(form.getEncryptionAlgorithm());
 		parameters.bLevel().setSigningDate(form.getDate());
 
 		CertificateToken signingCertificate = new CertificateToken(form.getCertificate());
 		parameters.setSigningCertificate(signingCertificate);
 
 		List<X509Certificate> certificateChainBytes = form.getCertChain();
-		List<CertificateToken> certChainToken = new ArrayList<>();
+		List<CertificateToken> certChainToken = new LinkedList<>();
 		for (X509Certificate cert : certificateChainBytes) {
 			certChainToken.add(new CertificateToken(cert));
 		}
@@ -316,7 +419,7 @@ public class DSSService {
 	}
 
 	@SuppressWarnings({ "rawtypes", "unchecked" })
-	private void fillTimestampParameters(AbstractSignatureParameters parameters, SignatureDocumentForm form) {
+	private void fillTimestampParameters(AbstractSignatureParameters parameters, SignatureDocumentForm form) throws UnsupportedSignatureFormatException {
 		SignatureForm signatureForm = form.getSignatureForm();
 		ASiCContainerType containerType = form.getContainerType();
 
@@ -328,46 +431,57 @@ public class DSSService {
 		parameters.setArchiveTimestampParameters(timestampParameters);
 	}
 
+	private TimestampParameters getTimestampParameters(ASiCContainerType containerType, SignatureForm signatureForm) throws UnsupportedSignatureFormatException {
+		TimestampParameters parameters;
+		if (containerType == null) {
+			parameters = switch (signatureForm) {
+				case CAdES -> new CAdESTimestampParameters();
+				case XAdES -> new XAdESTimestampParameters();
+				case PAdES -> new PAdESTimestampParameters();
+				case JAdES -> new JAdESTimestampParameters();
+				default -> {
+					logger.error(String.format("Signature format selected for a time-stamp (%s) is not supported.", signatureForm));
+					throw new UnsupportedSignatureFormatException(
+						  String.format("Signature format selected for a time-stamp (%s) is not supported.", signatureForm));
+				}
+			};
 
-	@SuppressWarnings({ "rawtypes" })
-	private AbstractSignatureParameters getSignatureParameters(ASiCContainerType containerType, SignatureForm signatureForm,
-															   SignaturePackaging packaging, DSSDocument toSignDocument, DigestAlgorithm digestAlgorithm) {
-		AbstractSignatureParameters parameters;
-		if (containerType != null) {
-			parameters = getASiCSignatureParameters(containerType, signatureForm);
 		} else {
 			switch (signatureForm) {
 				case CAdES:
-					parameters = new CAdESSignatureParameters();
-					break;
-				case PAdES:
-					PAdESSignatureParameters padesParams = new PAdESSignatureParameters();
-					padesParams.setContentSize(9472 * 2); // double reserved space for signature
-					parameters = padesParams;
+					ASiCWithCAdESTimestampParameters asicParameters = new ASiCWithCAdESTimestampParameters();
+					asicParameters.aSiC().setContainerType(containerType);
+					parameters = asicParameters;
 					break;
 				case XAdES:
-					parameters = new XAdESSignatureParameters();
-					break;
-				case JAdES:
-					JAdESSignatureParameters jadesParameters = new JAdESSignatureParameters();
-					jadesParameters.setJwsSerializationType(JWSSerializationType.JSON_SERIALIZATION);
-					jadesParameters.setSigDMechanism(SigDMechanism.OBJECT_ID_BY_URI_HASH); // to use by default
-					parameters = jadesParameters;
+					parameters = new XAdESTimestampParameters();
 					break;
 				default:
-					throw new IllegalArgumentException(String.format("Unknown signature form : %s", signatureForm));
+					logger.error(String.format("Signature format selected for an ASiC time-stamp (%s) is not supported.", signatureForm));
+					throw new UnsupportedSignatureFormatException(
+						  String.format("Signature format selected for an ASiC time-stamp (%s) is not supported.", signatureForm));
 			}
 		}
 		return parameters;
 	}
 
-
-
+	private void setImageSignedPDF(PAdESService service, PAdESSignatureParameters parameters, SignatureDocumentForm form) throws DocumentSignDocParameterInvalidException {
+		SignatureImageParameters imageParameters;
+		try {
+			imageParameters = setVisualSignature(form.getDocumentToSign(), form.getCertificate(), form.getDate());
+		}
+		catch (IOException e){
+			logger.error("There was an excepted error reading document to sign's content. {}", e.getMessage());
+			throw new DocumentSignDocParameterInvalidException("There was an excepted error reading document to sign's content.", "document");
+		}
+		parameters.setImageParameters(imageParameters);
+		service.setPdfObjFactory(new PdfBoxNativeObjectFactory());
+	}
 
 	private SignatureImageParameters setVisualSignature(DSSDocument document, X509Certificate certificate, Date date) throws IOException {
 
 		InputStream is = document.openStream();
-		PDDocument pdfDocument = PDDocument.load(is, (String) null);
+		PDDocument pdfDocument = Loader.loadPDF(is.readAllBytes());
 
 		// Initialize visual signature and configure
 		SignatureImageParameters imageParameters = createImageParameters();
@@ -401,7 +515,7 @@ public class DSSService {
 		String dateString = sdf.format(date.getTime());
 
 		SignatureImageTextParameters textParameters = new SignatureImageTextParameters();
-		DSSFont font = new PdfBoxNativeFont(PDType1Font.HELVETICA);
+		DSSFont font = new PdfBoxNativeFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA));
 		font.setSize(10);
 		textParameters.setFont(font);
 		textParameters.setText("Signing documents with EUDI Wallet\nSigner: "+name+"\n"+dateString);
@@ -425,70 +539,4 @@ public class DSSService {
 
 		return imageParameters;
 	}
-
-
-
-
-	@SuppressWarnings("rawtypes")
-    private MultipleDocumentsSignatureService getASiCSignatureService(SignatureForm signatureForm, CertificateVerifier cv) {
-		return switch (signatureForm) {
-			case CAdES -> new ASiCWithCAdESService(cv);
-			case XAdES -> new ASiCWithXAdESService(cv);
-			default -> throw new IllegalArgumentException(
-				  String.format("Not supported signature form for an ASiC container : %s", signatureForm));
-		};
-    }
-
-    private TimestampParameters getTimestampParameters(ASiCContainerType containerType, SignatureForm signatureForm) {
-        TimestampParameters parameters;
-        if (containerType == null) {
-			parameters = switch (signatureForm) {
-				case CAdES -> new CAdESTimestampParameters();
-				case XAdES -> new XAdESTimestampParameters();
-				case PAdES -> new PAdESTimestampParameters();
-				case JAdES -> new JAdESTimestampParameters();
-				default -> throw new IllegalArgumentException(
-					  String.format("Not supported signature form for a time-stamp : %s", signatureForm));
-			};
-
-        } else {
-            switch (signatureForm) {
-                case CAdES:
-                    ASiCWithCAdESTimestampParameters asicParameters = new ASiCWithCAdESTimestampParameters();
-                    asicParameters.aSiC().setContainerType(containerType);
-                    parameters = asicParameters;
-                    break;
-                case XAdES:
-                    parameters = new XAdESTimestampParameters();
-                    break;
-                default:
-                    throw new IllegalArgumentException(
-                          String.format("Not supported signature form for an ASiC time-stamp : %s", signatureForm));
-            }
-        }
-        return parameters;
-    }
-
-
-
-    @SuppressWarnings({ "rawtypes" })
-    private AbstractSignatureParameters getASiCSignatureParameters(ASiCContainerType containerType, SignatureForm signatureForm) {
-        AbstractSignatureParameters parameters;
-        switch (signatureForm) {
-            case CAdES:
-                ASiCWithCAdESSignatureParameters asicCadesParams = new ASiCWithCAdESSignatureParameters();
-                asicCadesParams.aSiC().setContainerType(containerType);
-                parameters = asicCadesParams;
-                break;
-            case XAdES:
-                ASiCWithXAdESSignatureParameters asicXadesParams = new ASiCWithXAdESSignatureParameters();
-                asicXadesParams.aSiC().setContainerType(containerType);
-                parameters = asicXadesParams;
-                break;
-            default:
-                throw new IllegalArgumentException(
-                      String.format("Not supported signature form for an ASiC container : %s", signatureForm));
-        }
-        return parameters;
-    }
 }

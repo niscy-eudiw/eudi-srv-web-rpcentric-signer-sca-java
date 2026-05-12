@@ -17,33 +17,36 @@
 package eu.europa.ec.eudi.signer.r4.sca.web.dto;
 
 import eu.europa.ec.eudi.signer.r4.sca.web.dto.qtsp.signatures.signDoc.DocumentsSignDocRequest;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import java.util.List;
 
 public class SignatureDocumentRequest {
+    @Schema(description = "The unique identifier of the credential used for the signature.")
     @NotBlank(message = "The credentialID must be present.")
     private String credentialID;
-
-    @NotEmpty(message = "The list of documents and configuration must be present.")
+    @Schema(description = "An array of JSON Objects containing base64-encoded documents and further parameters.", required = true)
+    @NotEmpty(message = "At least one document to be signed must be sent in the request.")
+    @NotNull(message = "Missing required parameter: documents")
     @Valid
     private List<DocumentsSignDocRequest> documents;
-
-    @NotBlank(message = "The hashAlgorithmOID must be defined.")
-    @Pattern(regexp = "^\\d+\\.\\d+\\.\\d+(\\.\\d+)*+$", message = "Invalid parameter hashAlgorithmOID")
+    @Schema(description = "Hashing algorithm OID that will be used to calculate document(s) hash(es).", required = true)
+    @NotBlank(message = "Missing required parameter: hashAlgorithmOID")
     private String hashAlgorithmOID;
 
+    @Schema(description = "The Authorization Server used to perform the signature process.")
     @Pattern(regexp = "^(https?|ftp):\\/\\/(\\S+(:\\S*)?@)?([\\w.-]+|\\[[\\dA-Fa-f:.]+])(\\:\\d+)?(\\/[-\\w@:%+.~#?&/=]*)?$",
           message = "Invalid authorization server URL")
     private String authorizationServerUrl;
-
+    @Schema(description = "The Resource Server used to perform the signature process.")
     @Pattern(regexp = "^(https?|ftp):\\/\\/(\\S+(:\\S*)?@)?([\\w.-]+|\\[[\\dA-Fa-f:.]+])(\\:\\d+)?(\\/[-\\w@:%+.~#?&/=]*)?$",
           message = "Invalid resource server URL")
     private String resourceServerUrl;
-
-    // url where to post the file and redirect after the end of the signature flow
+    @Schema(description = "The URI where to post the signed document and where to return to after the signature flow.")
     @NotBlank(message = "The redirectURI is required and is missing from the request.")
     @Pattern(regexp = "^(https?|ftp):\\/\\/(\\S+(:\\S*)?@)?([\\w.-]+|\\[[\\dA-Fa-f:.]+])(\\:\\d+)?(\\/[-\\w@:%+.~#?&/=]*)?$",
           message = "Invalid redirect URI")
@@ -111,7 +114,7 @@ public class SignatureDocumentRequest {
     public String toString() {
         return "SignatureDocumentRequest{" +
               "credentialID='" + credentialID + '\'' +
-              ", documents=" + documents +
+              ", documents=" + documents.toString() +
               ", hashAlgorithmOID='" + hashAlgorithmOID + '\'' +
               ", authorizationServerUrl='" + authorizationServerUrl + '\'' +
               ", resourceServerUrl='" + resourceServerUrl + '\'' +

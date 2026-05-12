@@ -14,7 +14,7 @@
  limitations under the License.
  */
 
-package eu.europa.ec.eudi.signer.r4.sca.model;
+package eu.europa.ec.eudi.signer.r4.sca.web.session;
 
 import eu.europa.ec.eudi.signer.r4.sca.web.dto.qtsp.signatures.signDoc.DocumentsSignDocRequest;
 

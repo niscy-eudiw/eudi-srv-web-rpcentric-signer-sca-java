@@ -16,31 +16,31 @@
 
 package eu.europa.ec.eudi.signer.r4.sca.web.dto.qtsp.signatures.signDoc;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 
 import java.util.List;
 
 public class DocumentsSignDocRequest {
+    @Schema(description = "A base64-encoded document.", required = true)
     @NotBlank(message = "The document must be present in the request")
     private String document;
-
+    @Schema(description = "The name of the document to be signed.")
     private String document_name;
-
+    @Schema(description = "The digital signature format to use when signing the document.", required = true)
     @NotBlank(message = "Signature format cannot be blank")
     @Pattern(regexp = "P|C|X|J", message = "Invalid signature format")
     private String signature_format = null;
-
-    @Pattern(regexp = "Ades-B-B|Ades-B-T|Ades-B-LT|Ades-B-LTA|Ades-B|Ades-T|Ades-LT|Ades-LTA",
-          message = "Invalid conformance level")
+    @Schema(description = "The signature conformance level. The default level is AdES-B-B.", required = true)
+    @Pattern(regexp = "Ades-B-B|Ades-B-T|Ades-B-LT|Ades-B-LTA|Ades-B|Ades-T|Ades-LT|Ades-LTA", message = "Invalid conformance level")
     private String conformance_level = "AdES-B-B";
-
+    @Schema(description = "List of signed attributes.")
     private List<AttributeSignDocRequest> signed_props;
-
-    @Pattern(regexp = "ENVELOPED|ENVELOPING|DETACHED|INTERNALLY_DETACHED",
-          message = "Invalid signed envelope property")
+    @Schema(description = "The property concerning the signed envelope.", required = true)
+    @Pattern(regexp = "ENVELOPED|ENVELOPING|DETACHED|INTERNALLY_DETACHED", message = "Invalid signed envelope property")
     private String signed_envelope_property;
-
+    @Schema(description = "Specifies the signature container type. The default container is 'No'")
     @Pattern(regexp = "No|ASiC-E|ASiC-S", message = "Invalid container value")
     private String container = "No";
 
@@ -98,6 +98,19 @@ public class DocumentsSignDocRequest {
 
     public void setContainer(String container) {
         this.container = container;
+    }
+
+    @Override
+    public String toString() {
+        return "DocumentsSignDocRequest{" +
+              "document='" + document + '\'' +
+              ", document_name='" + document_name + '\'' +
+              ", signature_format='" + signature_format + '\'' +
+              ", conformance_level='" + conformance_level + '\'' +
+              ", signed_props=" + signed_props +
+              ", signed_envelope_property='" + signed_envelope_property + '\'' +
+              ", container='" + container + '\'' +
+              '}';
     }
 
     /**
